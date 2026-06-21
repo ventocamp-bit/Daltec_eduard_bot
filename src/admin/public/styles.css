@@ -8,15 +8,15 @@
 
 body {
   margin: 0;
-  background: #f3f4f6;
+  background: #f6f7f9;
   color: #111827;
   font-family: Arial, sans-serif;
 }
 
 main {
-  max-width: 1440px;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 18px;
+  padding: 18px 20px 28px;
 }
 
 .login-view {
@@ -49,7 +49,7 @@ header {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 .header-actions {
@@ -58,7 +58,7 @@ header {
 }
 
 h1 {
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.15;
   margin: 0 0 4px;
 }
@@ -71,8 +71,9 @@ p {
 .workspace {
   align-items: start;
   display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(560px, 1.2fr) minmax(420px, 0.8fr);
+  gap: 16px;
+  grid-template-columns: minmax(620px, 1.12fr) minmax(390px, 0.88fr);
+  margin-bottom: 14px;
 }
 
 form {
@@ -80,11 +81,12 @@ form {
   gap: 10px;
 }
 
+.overview-panel,
 .setup-panel {
   background: #ffffff;
   border: 1px solid #e1e5eb;
   border-radius: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   overflow: hidden;
 }
 
@@ -108,14 +110,43 @@ form {
   background: #ffffff;
   border: 1px solid #e1e5eb;
   border-radius: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
   overflow: hidden;
+}
+
+.overview-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 10px;
+}
+
+.overview-card {
+  background: #fbfcfd;
+  border: 1px solid #e7ebf0;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-height: 76px;
+  padding: 11px 12px;
+}
+
+.overview-card small,
+.overview-card span {
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.overview-card strong {
+  font-size: 20px;
+  line-height: 1.1;
 }
 
 .monitoring-grid {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(9, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 12px;
 }
 
@@ -149,7 +180,7 @@ form {
 .review-list {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   padding: 12px;
 }
 
@@ -354,7 +385,7 @@ form {
 
 .process-strip {
   border-top: 1px solid #e1e5eb;
-  display: grid;
+  display: none;
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
@@ -403,6 +434,35 @@ fieldset {
   padding: 12px;
 }
 
+.primary-settings {
+  border-color: #d8dee7;
+}
+
+.settings-details {
+  background: #ffffff;
+  border: 1px solid #e1e5eb;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 0;
+}
+
+.settings-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  list-style-position: inside;
+  padding: 12px;
+}
+
+.settings-details fieldset {
+  border-left: 0;
+  border-radius: 0;
+  border-right: 0;
+  border-bottom: 0;
+  margin: 0;
+}
+
 .stack-panel {
   background: #ffffff;
   border: 1px solid #e1e5eb;
@@ -427,7 +487,7 @@ label {
 .inline {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .inline.two {
@@ -475,7 +535,7 @@ select {
   align-items: center;
   display: grid;
   gap: 6px;
-  grid-template-columns: minmax(120px, 1.4fr) minmax(92px, 0.8fr) minmax(130px, 1fr) 64px 32px;
+  grid-template-columns: minmax(110px, 1.1fr) minmax(86px, 0.7fr) minmax(150px, 1.2fr) 64px 32px;
   padding: 6px;
 }
 
@@ -691,8 +751,8 @@ button.danger {
 iframe {
   background: #ffffff;
   border: 0;
-  height: calc(100vh - 112px);
-  min-height: 560px;
+  height: calc(100vh - 142px);
+  min-height: 520px;
   width: 100%;
 }
 
@@ -786,6 +846,7 @@ iframe {
   .workspace,
   .setup-grid,
   .monitoring-grid,
+  .overview-grid,
   .review-list,
   form,
   .inline,

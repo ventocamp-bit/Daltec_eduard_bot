@@ -26,6 +26,12 @@ const saasBlockersEl = document.querySelector('#saas-blockers');
 const reviewStateEl = document.querySelector('#review-state');
 const reviewListEl = document.querySelector('#review-list');
 const sendReviewDigestButton = document.querySelector('#send-review-digest');
+const overviewOperationEl = document.querySelector('#overview-operation');
+const overviewOperationDetailEl = document.querySelector('#overview-operation-detail');
+const overviewProofEl = document.querySelector('#overview-proof');
+const overviewProofDetailEl = document.querySelector('#overview-proof-detail');
+const overviewFeedbackEl = document.querySelector('#overview-feedback');
+const overviewFeedbackDetailEl = document.querySelector('#overview-feedback-detail');
 const gmailQueryEl = document.querySelector('#gmail-query');
 const copyQueryButton = document.querySelector('#copy-query');
 const processStripEl = document.querySelector('#process-strip');
@@ -476,6 +482,9 @@ async function refreshMonitoring() {
   const metrics = snapshot.metrics;
   monitoringStateEl.textContent = snapshot.alerts.length ? `${snapshot.alerts.length} Warnung(en)` : 'OK';
   monitoringStateEl.className = snapshot.alerts.some((alert) => alert.level === 'error') ? 'open' : 'ready';
+  overviewOperationEl.textContent = snapshot.alerts.some((alert) => alert.level === 'error') ? 'Achtung' : 'Läuft';
+  overviewOperationEl.className = snapshot.alerts.some((alert) => alert.level === 'error') ? 'open' : 'ready';
+  overviewOperationDetailEl.textContent = `Mail ${metrics.mailConnected ? 'verbunden' : 'offen'} · CSV ${metrics.inventory.stale ? 'alt' : 'frisch'} · ${metrics.processedCount} verarbeitet`;
   monitoringGridEl.innerHTML = [
     monitorMetric('Runs 24h', metrics.runCount),
     monitorMetric('Ausgeschlossen', metrics.excludedRunCount),
@@ -508,6 +517,11 @@ async function refreshSaasReadiness() {
     ? 'Sellable'
     : snapshot.daltecDailyUseCandidate ? 'DALTEC Proof' : 'Blockiert';
   saasStateEl.className = snapshot.sellableSaas ? 'ready' : 'open';
+  overviewProofEl.textContent = `${snapshot.metrics.processedRuns}/${snapshot.metrics.proofTargetRuns}`;
+  overviewProofEl.className = snapshot.sellableSaas ? 'ready' : 'open';
+  overviewProofDetailEl.textContent = snapshot.blockers?.length
+    ? `${snapshot.blockers.length} Blocker: ${(snapshot.blockers || []).map((item) => item.code).slice(0, 2).join(', ')}`
+    : 'Proof-Kriterien erfüllt.';
   saasGridEl.innerHTML = [
     monitorMetric('Status', snapshot.status),
     monitorMetric('Storage', snapshot.storageMode),
@@ -551,8 +565,13 @@ async function refreshReviewQueue() {
   const queue = await request('/api/review-queue');
   reviewStateEl.textContent = `${queue.openCount} offen | ${queue.feedbackCount}/${queue.targetFeedbackCount} Feedbacks`;
   reviewStateEl.className = queue.openCount ? 'open' : 'ready';
+  overviewFeedbackEl.textContent = `${queue.feedbackCount}/${queue.targetFeedbackCount}`;
+  overviewFeedbackEl.className = queue.feedbackCount >= queue.targetFeedbackCount ? 'ready' : 'open';
+  overviewFeedbackDetailEl.textContent = queue.openCount
+    ? `${queue.openCount} offene Bewertungen.`
+    : 'Keine offenen Bewertungen.';
   reviewListEl.innerHTML = queue.items.length
-    ? queue.items.slice(0, 12).map(reviewQueueItemHtml).join('')
+    ? queue.items.slice(0, 6).map(reviewQueueItemHtml).join('')
     : '<div class="monitor-alert ok">Keine offenen Drafts ohne Feedback.</div>';
 }
 
