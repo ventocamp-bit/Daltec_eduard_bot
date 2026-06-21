@@ -847,6 +847,10 @@ function isMonitoringNoise(run, config, settings) {
   return false;
 }
 
+export function isArchivedProofRun(run) {
+  return ['ignored'].includes(String(run.status || ''));
+}
+
 async function countInventoryItems(inventoryPath) {
   try {
     return (await readCsvObjects(inventoryPath)).length;
@@ -929,7 +933,7 @@ async function buildSaasReadinessSnapshot(context) {
   const settings = await loadSettings(context);
   const mailStatus = await getMailConnectionStatus(config, context);
   const runtime = await buildRuntimeReadiness({ config, settings, mailStatus });
-  const productionRuns = allRuns.filter((run) => run && !isMonitoringNoise(run, config, settings));
+  const productionRuns = allRuns.filter((run) => run && !isMonitoringNoise(run, config, settings) && !isArchivedProofRun(run));
   const processedRuns = productionRuns.filter((run) => !['received', 'parsing', 'parsed', 'matching', 'pricing', 'drafting'].includes(run.status));
   const duplicateEvents = productionRuns.flatMap((run) => run.events || []).filter((event) => event.event_type === 'email_deduplicated');
   const suspectedDuplicateGroups = findSuspectedDuplicateGroups(productionRuns);
@@ -1045,6 +1049,7 @@ async function buildReviewQueue(context) {
   const items = details
     .filter(Boolean)
     .filter((run) => !isMonitoringNoise(run, config, settings))
+    .filter((run) => !isArchivedProofRun(run))
     .filter((run) => ['completed', 'sent_to_owner', 'needs_review'].includes(run.status))
     .filter((run) => run.draft || run.draft_html)
     .filter((run) => !(run.owner_feedback || run.summary?.ownerFeedback))
@@ -1054,6 +1059,7 @@ async function buildReviewQueue(context) {
   const feedbackCount = details
     .filter(Boolean)
     .filter((run) => !isMonitoringNoise(run, config, settings))
+    .filter((run) => !isArchivedProofRun(run))
     .filter((run) => run.owner_feedback || run.summary?.ownerFeedback)
     .length;
 

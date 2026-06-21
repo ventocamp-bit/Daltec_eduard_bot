@@ -3,7 +3,7 @@ import http from 'node:http';
 import test from 'node:test';
 import { createPasswordHash, verifyPassword } from '../src/auth.js';
 import { createAdminApp } from '../src/admin/server.js';
-import { findSuspectedDuplicateGroups } from '../src/admin/server.js';
+import { findSuspectedDuplicateGroups, isArchivedProofRun } from '../src/admin/server.js';
 import { createFeedbackToken } from '../src/feedback-token.js';
 import { inspectRuntimeReadiness } from '../src/production-readiness.js';
 
@@ -80,6 +80,12 @@ test('monitoring detects suspected duplicate processed runs by customer and pric
   assert.equal(groups[0].customerEmail, 'ha1ka1h@aon.at');
   assert.equal(groups[0].extraRuns, 1);
   assert.deepEqual(groups[0].runIds, ['run-a', 'run-b']);
+});
+
+test('readiness archives ignored proof runs', () => {
+  assert.equal(isArchivedProofRun({ status: 'ignored' }), true);
+  assert.equal(isArchivedProofRun({ status: 'completed' }), false);
+  assert.equal(isArchivedProofRun({ status: 'sent_to_owner' }), false);
 });
 
 test('admin API requires login session', async () => {
