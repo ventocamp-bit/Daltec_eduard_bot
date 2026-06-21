@@ -1,0 +1,90 @@
+{
+  "dealer": {
+    "name": "Daltec GmbH",
+    "locationName": "Harmannsdorf",
+    "defaultDeliveryTime": "4-5 Wochen"
+  },
+  "pricing": {
+    "offerFactor": 0.87,
+    "roundTo": 10,
+    "vatRate": 0.2,
+    "inventoryFallbackMarkup": 1,
+    "inventoryFallbackMarkupPercent": 0,
+    "categoryDiscounts": {
+      "anhaenger": 13,
+      "ersatzteile": 13,
+      "zubehoer": 13
+    },
+    "productGroups": [
+      {
+        "id": "anhaenger",
+        "label": "Anhaenger",
+        "match": "anhaenger,hochlader,kipper,dreiseiten,rueckwaerts,autotransporter,multitransporter,fahrzeugtransporter,flatbed,cargo",
+        "enabled": true
+      },
+      {
+        "id": "ersatzteile",
+        "label": "Ersatzteile",
+        "match": "ersatzteil,ersatzteile,spare part,spare parts",
+        "enabled": true
+      },
+      {
+        "id": "zubehoer",
+        "label": "Zubehoer",
+        "match": "zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,aluminium ramps,aluminum ramps,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck",
+        "enabled": true
+      }
+    ],
+    "rules": [
+      {
+        "match": "Hochlader",
+        "category": "anhaenger",
+        "source": "uvp_discount",
+        "percent": 13,
+        "enabled": true
+      },
+      {
+        "match": "Plane",
+        "category": "zubehoer",
+        "source": "uvp_discount",
+        "percent": 10,
+        "enabled": true
+      },
+      {
+        "match": "Autotransporter",
+        "category": "anhaenger",
+        "source": "ek_markup",
+        "percent": 18,
+        "enabled": true
+      }
+    ]
+  },
+  "mail": {
+    "to": "michael@daltec.at",
+    "subject": "Daltec Eduard Angebot",
+    "copyQuestion": "Bei Fragen stehe ich Ihnen jederzeit zur Verfuegung.",
+    "deliveryMode": "owner_review"
+  },
+  "signature": {
+    "greeting": "Beste Gruesse",
+    "name": "Lukas Mitter, MSc",
+    "company": "Daltec GmbH",
+    "address1": "Esaromstr. 5 (Ecke Bahnhofplatz)",
+    "address2": "2111 Harmannsdorf - Rueckersdorf",
+    "phone": "Buero: +43 676 777 18 00",
+    "email": "Email: lukas@daltec.at",
+    "website": "Website: Daltec.at"
+  },
+  "table": {
+    "headerBackground": "#f2f2f2",
+    "borderColor": "#dddddd",
+    "accentColor": "#c00000",
+    "textColor": "#000000",
+    "hintBackground": "#f9f9f9"
+  },
+  "data": {
+    "preferLocalCsv": false,
+    "lagerCsvPath": "data/lager.csv",
+    "inventoryMaxAgeHours": 24
+  }
+}

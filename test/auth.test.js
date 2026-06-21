@@ -1,0 +1,402 @@
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import test from 'node:test';
+import { createPasswordHash, verifyPassword } from '../src/auth.js';
+import { createAdminApp } from '../src/admin/server.js';
+import { findSuspectedDuplicateGroups } from '../src/admin/server.js';
+import { createFeedbackToken } from '../src/feedback-token.js';
+import { inspectRuntimeReadiness } from '../src/production-readiness.js';
+
+test('password hashes verify only the original password', () => {
+  const hash = createPasswordHash('secret-pass');
+  assert.equal(verifyPassword('secret-pass', hash), true);
+  assert.equal(verifyPassword('wrong-pass', hash), false);
+});
+
+test('production readiness blocks unsafe SaaS runtime defaults', () => {
+  const blocked = inspectRuntimeReadiness({
+    env: {
+      NODE_ENV: 'production',
+      APP_BASE_URL: 'http://localhost:3030',
+      ADMIN_PASSWORD: 'admin',
+      ADMIN_SESSION_SECRET: 'change-this-long-random-secret',
+      EDUARD_INGEST_SECRET: 'dev-secret',
+      POSTGRES_PASSWORD: 'eduard-postgres-local-change-me',
+      GOOGLE_OAUTH_VERIFIED: 'false'
+    },
+    config: { app: { baseUrl: 'http://localhost:3030' } },
+    settings: { mail: { deliveryMode: 'owner_review' } },
+    mailStatus: { gmail: { connected: false }, outlook: { connected: false } },
+    backup: { configured: false, latestAgeHours: null, maxAgeHours: 26 }
+  });
+  assert.equal(blocked.ready, false);
+  assert.equal(blocked.blockers.some((item) => item.code === 'postgres_enabled'), true);
+  assert.equal(blocked.blockers.some((item) => item.code === 'backup_recent'), true);
+  assert.equal(blocked.blockers.some((item) => item.code === 'oauth_verified_or_forwarding'), true);
+
+  const ready = inspectRuntimeReadiness({
+    env: {
+      NODE_ENV: 'production',
+      APP_BASE_URL: 'https://angebote.daltec.at',
+      DATABASE_URL: 'postgres://eduard:secret@example/eduard',
+      ADMIN_PASSWORD_HASH: createPasswordHash('long-random-production-password'),
+      ADMIN_SESSION_SECRET: '0123456789abcdef0123456789abcdef',
+      EDUARD_INGEST_SECRET: 'abcdef0123456789abcdef0123456789',
+      POSTGRES_PASSWORD: 'postgres-secret-0123456789abcdef',
+      SAAS_MAIL_MODE: 'central_forwarding',
+      GOOGLE_OAUTH_VERIFIED: 'false'
+    },
+    config: { app: { baseUrl: 'https://angebote.daltec.at' } },
+    settings: { mail: { deliveryMode: 'owner_review' } },
+    mailStatus: { gmail: { connected: true }, outlook: { connected: false } },
+    backup: { configured: true, latestAgeHours: 1, maxAgeHours: 26 }
+  });
+  assert.equal(ready.ready, true);
+  assert.equal(ready.warnings.some((item) => item.code === 'central_forwarding_mode'), true);
+});
+
+test('monitoring detects suspected duplicate processed runs by customer and priced line items', () => {
+  const baseRun = {
+    customer_json: { email: 'HA1KA1H@aon.at' },
+    summary: { totalGross: 3190 },
+    line_items_json: [
+      { produkt_name_original: '3518 -GD- Hochlader, Bordwände 30cm -2000kg- Lfh: 56cm -195/55R10', preis_mail_brutto_num: 3008.33 },
+      { produkt_name_original: 'COC', preis_mail_brutto_num: 12.5 },
+      { produkt_name_original: 'Typisierung', preis_mail_brutto_num: 33.33 }
+    ]
+  };
+
+  const groups = findSuspectedDuplicateGroups([
+    { ...baseRun, id: 'run-a', inbound_message: { provider_message_id: 'gmail-a', subject: 'Fw: Neuer Lead' } },
+    { ...baseRun, id: 'run-b', inbound_message: { provider_message_id: 'gmail-b', subject: 'WG: Neuer Lead' } },
+    {
+      id: 'run-c',
+      customer_json: { email: 'other@example.com' },
+      line_items_json: [{ produkt_name_original: 'Hochlader anderer Kunde', preis_mail_brutto_num: 3008.33 }]
+    }
+  ]);
+
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].customerEmail, 'ha1ka1h@aon.at');
+  assert.equal(groups[0].extraRuns, 1);
+  assert.deepEqual(groups[0].runIds, ['run-a', 'run-b']);
+});
+
+test('admin API requires login session', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const sessionSecret = 'test-session-secret';
+  const previousIngestSecret = process.env.EDUARD_INGEST_SECRET;
+  process.env.EDUARD_INGEST_SECRET = 'test-ingest-secret';
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret,
+      cookieName: 'test_session',
+      secureCookie: false
+    },
+    gmailProofAnalyzer: async (options) => {
+      assert.equal(options.tenantId, 'daltec-local');
+      return {
+        query: 'subject:Eduard',
+        limit: Number(options.limit || 50),
+        messageCount: 1,
+        productNameCount: 1,
+        productsByCategory: {
+          anhaenger: [{ name: 'Hochlader 3318 3500kg', category: 'anhaenger', count: 1 }]
+        },
+        messages: [{
+          providerMessageId: 'gmail-proof-1',
+          subject: 'Eduard Anfrage',
+          fromDomain: 'example.com',
+          receivedAt: new Date().toISOString(),
+          customerDetected: true,
+          productCount: 1,
+          products: [{ name: 'Hochlader 3318 3500kg', category: 'anhaenger', price: 3000 }]
+        }]
+      };
+    }
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+
+    const blocked = await fetch(`${baseUrl}/api/settings`);
+    assert.equal(blocked.status, 401);
+
+    const failedLogin = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'owner@example.com', password: 'bad' })
+    });
+    assert.equal(failedLogin.status, 401);
+
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'owner@example.com', password: 'secret-pass' })
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie');
+    assert.match(cookie, /test_session=/);
+
+    const allowed = await fetch(`${baseUrl}/api/settings`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(allowed.status, 200);
+
+    const setup = await fetch(`${baseUrl}/api/setup-status`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(setup.status, 200);
+    const setupBody = await setup.json();
+    assert.equal(setupBody.process.length, 5);
+    assert.match(setupBody.forwarding.query, /subject:Eduard/);
+
+    const mailStatus = await fetch(`${baseUrl}/api/mail/status`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(mailStatus.status, 200);
+    const mailStatusBody = await mailStatus.json();
+    assert.equal(typeof mailStatusBody.gmail.configured, 'boolean');
+    assert.equal(typeof mailStatusBody.outlook.configured, 'boolean');
+
+    const gmailProofAnalysis = await fetch(`${baseUrl}/api/gmail/proof-analysis?limit=1`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(gmailProofAnalysis.status, 200);
+    const gmailProofAnalysisBody = await gmailProofAnalysis.json();
+    assert.equal(gmailProofAnalysisBody.messageCount, 1);
+    assert.equal(gmailProofAnalysisBody.productsByCategory.anhaenger[0].name, 'Hochlader 3318 3500kg');
+
+    const sampleCsv = await fetch(`${baseUrl}/api/sample-csv`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(sampleCsv.status, 200);
+    assert.match(await sampleCsv.text(), /Art.-Nr.;Art.-Bez./);
+
+    const invalidUpload = await fetch(`${baseUrl}/api/upload/lager`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/csv', Cookie: cookie },
+      body: 'Art.-Bez.;Lagermenge;Lagerwert\nHochlader;1;3000'
+    });
+    assert.equal(invalidUpload.status, 400);
+    assert.equal((await invalidUpload.json()).error, 'csv_invalid');
+
+    const validUpload = await fetch(`${baseUrl}/api/upload/lager`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/csv', Cookie: cookie },
+      body: [
+        'Lager;Art.-Nr.;Art.-Bez.;Lagermenge;Lagerwert;Länge;Breite;hzGGew',
+        '1;3318-4-P3-3563;Hochlader 330x180x30 3500kg;1;3000;3300;1800;3500'
+      ].join('\n')
+    });
+    assert.equal(validUpload.status, 200);
+    const validUploadBody = await validUpload.json();
+    assert.equal(validUploadBody.validation.ok, true);
+
+    const cp1252Csv = [
+      'Lager;Art.-Nr.;Art.-Bez.;Lagermenge;Lagerwert;Länge;Breite;hzGGew',
+      '1;3318-4-P3-3563;Rückwärtskipper Größe Zubehör;1;3000;3300;1800;3500'
+    ].join('\n');
+    const cp1252Upload = await fetch(`${baseUrl}/api/upload/lager`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/csv', Cookie: cookie },
+      body: Buffer.from(cp1252Csv, 'latin1')
+    });
+    assert.equal(cp1252Upload.status, 200);
+    const cp1252UploadBody = await cp1252Upload.json();
+    assert.equal(cp1252UploadBody.validation.ok, true);
+    assert.equal(cp1252UploadBody.validation.stats.mappedHeaders.length, 'Länge');
+
+    const inboundPayload = {
+      provider: 'gmail',
+      provider_message_id: `msg-${Date.now()}`,
+      subject: 'Eduard Anfrage',
+      from_email: 'kunde@testkunde.at',
+      received_at: new Date().toISOString(),
+      raw_html: `
+        <table>
+          <tr><td><strong>Vorname</strong></td><td>Max</td></tr>
+          <tr><td><strong>Nachname</strong></td><td>Mustermann</td></tr>
+          <tr><td><strong>E-mail-Adresse</strong></td><td>max@testkunde.at</td></tr>
+          <tr><td>Hochlader 3318 3500kg</td><td>&euro; 3.000,00</td></tr>
+        </table>`
+    };
+    const inbound = await fetch(`${baseUrl}/api/inbound/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify(inboundPayload)
+    });
+    assert.equal(inbound.status, 201);
+    const inboundBody = await inbound.json();
+    assert.ok(inboundBody.offer_run_id);
+
+    const duplicate = await fetch(`${baseUrl}/api/inbound/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify(inboundPayload)
+    });
+    assert.equal(duplicate.status, 409);
+    assert.equal((await duplicate.json()).offer_run_id, inboundBody.offer_run_id);
+
+    const processed = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/process`, {
+      method: 'POST',
+      headers: { Cookie: cookie }
+    });
+    assert.equal(processed.status, 200);
+    const processedBody = await processed.json();
+    assert.match(processedBody.status, /completed|needs_review|failed_retryable/);
+    assert.ok(processedBody.events.length >= 3);
+    assert.ok(processedBody.customer_json);
+    assert.ok(Array.isArray(processedBody.line_items_json));
+    assert.ok(processedBody.pricing_json);
+    assert.ok(processedBody.match_json);
+    assert.ok(processedBody.draft_html);
+    assert.ok(processedBody.draft_subject);
+
+    const runs = await fetch(`${baseUrl}/api/runs`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(runs.status, 200);
+    assert.ok((await runs.json()).some((run) => run.id === inboundBody.offer_run_id));
+
+    const reviewQueue = await fetch(`${baseUrl}/api/review-queue`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(reviewQueue.status, 200);
+    const reviewQueueBody = await reviewQueue.json();
+    assert.equal(Array.isArray(reviewQueueBody.items), true);
+    if (['completed', 'sent_to_owner', 'needs_review'].includes(processedBody.status) && processedBody.draft_html) {
+      assert.ok(reviewQueueBody.items.some((item) => item.id === inboundBody.offer_run_id));
+    }
+
+    const digest = await fetch(`${baseUrl}/api/review-queue/digest?dryRun=1`, {
+      method: 'POST',
+      headers: { Cookie: cookie }
+    });
+    assert.equal(digest.status, 200);
+    const digestBody = await digest.json();
+    assert.equal(digestBody.dryRun, true);
+    assert.equal(typeof digestBody.html, 'string');
+    assert.match(digestBody.html, /Eduard Review Queue/);
+
+    const feedback = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ rating: 'sendable', notes: 'Proof ok' })
+    });
+    assert.equal(feedback.status, 200);
+    const feedbackBody = await feedback.json();
+    assert.equal(feedbackBody.owner_feedback.rating, 'sendable');
+    assert.equal(feedbackBody.owner_feedback.notes, 'Proof ok');
+    assert.equal(feedbackBody.events.some((event) => event.event_type === 'owner_feedback_recorded'), true);
+
+    const reviewQueueAfterFeedback = await fetch(`${baseUrl}/api/review-queue`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(reviewQueueAfterFeedback.status, 200);
+    const reviewQueueAfterFeedbackBody = await reviewQueueAfterFeedback.json();
+    assert.equal(reviewQueueAfterFeedbackBody.items.some((item) => item.id === inboundBody.offer_run_id), false);
+
+    const badFeedback = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ rating: 'looks_good_but_undefined' })
+    });
+    assert.equal(badFeedback.status, 400);
+
+    const feedbackToken = createFeedbackToken({
+      tenantId: 'daltec-local',
+      runId: inboundBody.offer_run_id,
+      rating: 'minor_correction'
+    }, sessionSecret);
+    const publicFeedback = await fetch(`${baseUrl}/feedback?token=${encodeURIComponent(feedbackToken)}`);
+    assert.equal(publicFeedback.status, 200);
+    assert.match(await publicFeedback.text(), /Feedback gespeichert/);
+    const feedbackDetail = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal((await feedbackDetail.json()).owner_feedback.rating, 'minor_correction');
+
+    const invalidPublicFeedback = await fetch(`${baseUrl}/feedback?token=bad`);
+    assert.equal(invalidPublicFeedback.status, 400);
+
+    const monitoring = await fetch(`${baseUrl}/api/monitoring`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(monitoring.status, 200);
+    const monitoringBody = await monitoring.json();
+    assert.equal(typeof monitoringBody.metrics.runCount, 'number');
+    assert.equal(typeof monitoringBody.metrics.excludedRunCount, 'number');
+    assert.equal(typeof monitoringBody.metrics.failedRate, 'number');
+    assert.equal(typeof monitoringBody.metrics.suspectedDuplicateRunCount, 'number');
+    assert.equal(Array.isArray(monitoringBody.metrics.suspectedDuplicateGroups), true);
+    assert.equal(Array.isArray(monitoringBody.alerts), true);
+    assert.ok('inventory' in monitoringBody.metrics);
+
+    const logout = await fetch(`${baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: { Cookie: cookie }
+    });
+    assert.equal(logout.status, 200);
+    assert.match(logout.headers.get('set-cookie'), /Max-Age=0/);
+    const publicInbound = await fetch(`${baseUrl}/api/eduard/inbound`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': 'test-ingest-secret' },
+      body: JSON.stringify({
+        dealerSlug: 'daltec',
+        provider: 'manual_test',
+        providerMessageId: `public-${Date.now()}`,
+        subject: 'Eduard Anfrage Test',
+        fromEmail: 'kunde@example.com',
+        toEmail: 'ventocamp@gmail.com',
+        receivedAt: new Date().toISOString(),
+        rawHtml: `
+          <table>
+            <tr><td><strong>Vorname</strong></td><td>Max</td></tr>
+            <tr><td><strong>Nachname</strong></td><td>Mustermann</td></tr>
+            <tr><td><strong>E-mail-Adresse</strong></td><td>max@example.com</td></tr>
+            <tr><td>Hochlader 3318 3500kg</td><td>&euro; 3.000,00</td></tr>
+          </table>`,
+        rawText: ''
+      })
+    });
+    assert.match(String(publicInbound.status), /201|202/);
+    const publicInboundBody = await publicInbound.json();
+    assert.ok(publicInboundBody.runId);
+    assert.ok(publicInboundBody.status);
+
+    const internalOwnerDraft = await fetch(`${baseUrl}/api/eduard/inbound`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': 'test-ingest-secret' },
+      body: JSON.stringify({
+        dealerSlug: 'daltec',
+        provider: 'manual_test',
+        providerMessageId: `internal-${Date.now()}`,
+        subject: 'Fwd: Daltec Eduard Angebot',
+        fromEmail: 'Luca Schneider <ventocamp@gmail.com>',
+        toEmail: 'michael@daltec.at',
+        receivedAt: new Date().toISOString(),
+        rawText: 'Sehr geehrter Herr Test, vielen Dank für Ihre Anfrage zu einem Eduard Anhänger.'
+      })
+    });
+    assert.equal(internalOwnerDraft.status, 200);
+    const internalOwnerDraftBody = await internalOwnerDraft.json();
+    assert.equal(internalOwnerDraftBody.status, 'ignored');
+    assert.equal(internalOwnerDraftBody.errorCode, 'ignored_internal_owner_draft');
+
+    const blockedPublicInbound = await fetch(`${baseUrl}/api/eduard/inbound`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-ingest-secret': 'wrong' },
+      body: JSON.stringify({ providerMessageId: 'blocked' })
+    });
+    assert.equal(blockedPublicInbound.status, 401);
+  } finally {
+    if (previousIngestSecret === undefined) delete process.env.EDUARD_INGEST_SECRET;
+    else process.env.EDUARD_INGEST_SECRET = previousIngestSecret;
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

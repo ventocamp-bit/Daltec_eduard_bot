@@ -1,0 +1,75 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      ADMIN_PORT: 3030
+      NODE_ENV: production
+      DATABASE_URL: postgres://eduard:${POSTGRES_PASSWORD:-eduard-postgres-local-change-me}@db:5432/eduard
+    volumes:
+      - ./data:/app/data
+      - ./secrets:/app/secrets:ro
+    expose:
+      - "3030"
+    command: npm run admin
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3030/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://eduard:${POSTGRES_PASSWORD:-eduard-postgres-local-change-me}@db:5432/eduard
+    volumes:
+      - ./data:/app/data
+      - ./secrets:/app/secrets:ro
+    command: npm run poll
+    depends_on:
+      db:
+        condition: service_healthy
+      web:
+        condition: service_started
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: eduard
+      POSTGRES_USER: eduard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-eduard-postgres-local-change-me}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eduard -d eduard"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:

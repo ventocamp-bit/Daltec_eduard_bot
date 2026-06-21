@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Eduard Angebote</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <section id="login-view" class="login-view" hidden>
+      <form id="login-form" class="login-card" method="post" action="/login">
+        <h1>Eduard Angebote</h1>
+        <p>Anmelden, Angebot prüfen, CSV und Preise verwalten.</p>
+        <label>E-Mail <input id="login-email" name="email" type="email" autocomplete="username" value="admin@daltec.local"></label>
+        <label>Passwort <input id="login-password" name="password" type="password" autocomplete="current-password" value="admin"></label>
+        <button type="submit">Anmelden</button>
+        <a id="local-login" class="button-link secondary-link" href="/login/local">Lokal anmelden</a>
+        <div id="login-error" class="login-error"></div>
+      </form>
+    </section>
+
+    <main id="app-view" hidden>
+      <header>
+        <div>
+          <h1>Eduard Angebote</h1>
+          <p>Vorschau links, Einstellungen rechts, speichern und fertig.</p>
+        </div>
+        <div class="header-actions">
+          <button id="logout" type="button" class="secondary">Abmelden</button>
+          <button id="save">Speichern</button>
+        </div>
+      </header>
+
+      <section class="setup-panel">
+        <div class="panel-head">
+          <strong>Schnellstart</strong>
+          <span id="setup-ready">Prüfe Setup...</span>
+        </div>
+        <div class="setup-grid">
+          <div id="setup-checks" class="setup-checks"></div>
+          <div class="setup-actions">
+            <label>Gmail-Regel <input id="gmail-query" type="text" readonly></label>
+            <div class="connector-grid">
+              <a id="gmail-connect" class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
+              <a id="outlook-connect" class="button-link secondary-link" href="/api/oauth/microsoft/start">Outlook verbinden</a>
+            </div>
+            <div class="status" id="mail-status">Mailstatus wird geladen...</div>
+            <div class="button-row">
+              <a class="button-link" href="/api/sample-csv">Muster-CSV</a>
+              <button id="copy-query" type="button" class="secondary">Regel kopieren</button>
+            </div>
+            <div class="status" id="setup-next">CSV laden, Gmail verbinden, Polling starten.</div>
+          </div>
+        </div>
+        <div class="process-strip" id="process-strip"></div>
+      </section>
+
+      <section class="monitor-panel">
+        <div class="panel-head">
+          <strong>Monitoring</strong>
+          <span id="monitoring-state">Prüfe...</span>
+        </div>
+        <div id="monitoring-grid" class="monitoring-grid"></div>
+        <div id="monitoring-alerts" class="monitoring-alerts"></div>
+      </section>
+
+      <section class="saas-panel">
+        <div class="panel-head">
+          <strong>SaaS Readiness</strong>
+          <span id="saas-state">Prüfe...</span>
+        </div>
+        <div id="saas-grid" class="monitoring-grid"></div>
+        <div id="saas-blockers" class="monitoring-alerts"></div>
+      </section>
+
+      <section class="review-panel">
+        <div class="panel-head">
+          <strong>Review Queue</strong>
+          <div class="panel-actions">
+            <span id="review-state">PrÃ¼fe...</span>
+            <button id="send-review-digest" type="button" class="secondary">Digest senden</button>
+          </div>
+        </div>
+        <div id="review-list" class="review-list"></div>
+      </section>
+
+      <section class="workspace">
+        <div class="preview-panel">
+          <div class="panel-head">
+            <strong>Vorschau</strong>
+            <span>Live</span>
+          </div>
+          <iframe id="preview-frame" title="Mail Vorschau"></iframe>
+        </div>
+
+        <form id="settings-form" accept-charset="UTF-8">
+          <fieldset>
+            <legend>Preis</legend>
+            <div class="inline">
+              <label>Rabatt % <input name="pricing.discountPercent" type="number" step="1" min="0" max="80"></label>
+              <label>Anhänger Rabatt % <input name="pricing.categoryDiscounts.anhaenger" type="number" step="1" min="0" max="80"></label>
+              <label>Zubehör Rabatt % <input name="pricing.categoryDiscounts.zubehoer" type="number" step="1" min="0" max="80"></label>
+              <label>Rundung auf <input name="pricing.roundTo" type="number" step="5" min="5" max="100"></label>
+              <label>MwSt. % <input name="pricing.vatPercent" type="number" step="1" min="0" max="30"></label>
+              <label>EK-Aufschlag Lager % <input name="pricing.inventoryFallbackMarkupPercent" type="number" step="1" min="0" max="300"></label>
+            </div>
+            <div class="rules-head">
+              <strong>Produktgruppen</strong>
+              <button id="add-product-group" type="button" class="secondary">Gruppe hinzufÃ¼gen</button>
+            </div>
+            <div class="rule-table" id="product-groups"></div>
+            <div class="rules-head">
+              <strong>Regeln je Sorte oder Produkt</strong>
+              <button id="add-price-rule" type="button" class="secondary">Regel hinzufügen</button>
+            </div>
+            <div class="rule-table" id="price-rules"></div>
+            <label>Abschluss-Satz <input name="mail.copyQuestion" type="text"></label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Mail</legend>
+            <div class="inline two">
+              <label>Empfänger intern <input name="mail.to" type="email"></label>
+              <label>Betreff intern <input name="mail.subject" type="text"></label>
+              <label>Antwortmodus
+                <select name="mail.deliveryMode">
+                  <option value="owner_review">Intern prüfen</option>
+                  <option value="customer_auto">Direkt an Kunden</option>
+                </select>
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Händler</legend>
+            <div class="inline two">
+              <label>Händlername <input name="dealer.name" type="text"></label>
+              <label>Standort <input name="dealer.locationName" type="text"></label>
+              <label>Lieferzeit <input name="dealer.defaultDeliveryTime" type="text"></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Signatur</legend>
+            <div class="inline two">
+              <label>Gruß <input name="signature.greeting" type="text"></label>
+              <label>Name <input name="signature.name" type="text"></label>
+              <label>Firma <input name="signature.company" type="text"></label>
+              <label>Telefon <input name="signature.phone" type="text"></label>
+              <label>E-Mail <input name="signature.email" type="text"></label>
+              <label>Website <input name="signature.website" type="text"></label>
+              <label>Adresse 1 <input name="signature.address1" type="text"></label>
+              <label>Adresse 2 <input name="signature.address2" type="text"></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Farben</legend>
+            <div class="inline">
+              <label>Header <input name="table.headerBackground" type="color"></label>
+              <label>Akzent <input name="table.accentColor" type="color"></label>
+              <label>Text <input name="table.textColor" type="color"></label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Lager und Preise</legend>
+            <label>CSV hochladen <input id="lager-upload" type="file" accept=".csv,text/csv"></label>
+            <div class="status" id="data-status">Keine CSV geladen</div>
+          </fieldset>
+
+          <section class="stack-panel">
+            <div class="panel-head compact">
+              <strong>Letzte Angebote</strong>
+              <span id="offer-count">0</span>
+            </div>
+            <div id="offer-list" class="offer-list"></div>
+          </section>
+
+          <section class="stack-panel">
+            <div class="panel-head compact">
+              <strong>Verarbeitungen</strong>
+              <span id="run-count">0</span>
+            </div>
+            <div id="run-list" class="offer-list"></div>
+          </section>
+        </form>
+      </section>
+
+      <section id="run-detail" class="run-detail" hidden>
+        <div class="panel-head">
+          <strong>Run Debug</strong>
+          <button id="run-detail-close" type="button" class="secondary">Schließen</button>
+        </div>
+        <div id="run-detail-body" class="run-detail-body"></div>
+      </section>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

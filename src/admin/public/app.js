@@ -1,0 +1,824 @@
+const form = document.querySelector('#settings-form');
+const appView = document.querySelector('#app-view');
+const loginView = document.querySelector('#login-view');
+const loginForm = document.querySelector('#login-form');
+const loginEmail = document.querySelector('#login-email');
+const loginPassword = document.querySelector('#login-password');
+const loginError = document.querySelector('#login-error');
+const dataStatusEl = document.querySelector('#data-status');
+const previewFrame = document.querySelector('#preview-frame');
+const offerListEl = document.querySelector('#offer-list');
+const offerCountEl = document.querySelector('#offer-count');
+const runListEl = document.querySelector('#run-list');
+const runCountEl = document.querySelector('#run-count');
+const runDetailEl = document.querySelector('#run-detail');
+const runDetailBodyEl = document.querySelector('#run-detail-body');
+const runDetailCloseEl = document.querySelector('#run-detail-close');
+const setupReadyEl = document.querySelector('#setup-ready');
+const setupChecksEl = document.querySelector('#setup-checks');
+const setupNextEl = document.querySelector('#setup-next');
+const monitoringStateEl = document.querySelector('#monitoring-state');
+const monitoringGridEl = document.querySelector('#monitoring-grid');
+const monitoringAlertsEl = document.querySelector('#monitoring-alerts');
+const saasStateEl = document.querySelector('#saas-state');
+const saasGridEl = document.querySelector('#saas-grid');
+const saasBlockersEl = document.querySelector('#saas-blockers');
+const reviewStateEl = document.querySelector('#review-state');
+const reviewListEl = document.querySelector('#review-list');
+const sendReviewDigestButton = document.querySelector('#send-review-digest');
+const gmailQueryEl = document.querySelector('#gmail-query');
+const copyQueryButton = document.querySelector('#copy-query');
+const processStripEl = document.querySelector('#process-strip');
+const mailStatusEl = document.querySelector('#mail-status');
+const gmailConnectEl = document.querySelector('#gmail-connect');
+const outlookConnectEl = document.querySelector('#outlook-connect');
+const localLoginEl = document.querySelector('#local-login');
+const productGroupsEl = document.querySelector('#product-groups');
+const addProductGroupButton = document.querySelector('#add-product-group');
+const priceRulesEl = document.querySelector('#price-rules');
+const addPriceRuleButton = document.querySelector('#add-price-rule');
+let currentSettings = {};
+
+document.querySelector('#save').addEventListener('click', save);
+document.querySelector('#logout').addEventListener('click', logout);
+document.querySelector('#lager-upload').addEventListener('change', () => uploadCsv('lager', '#lager-upload'));
+copyQueryButton.addEventListener('click', copyGmailQuery);
+gmailConnectEl.addEventListener('click', preventDisabledLink);
+outlookConnectEl.addEventListener('click', preventDisabledLink);
+addProductGroupButton.addEventListener('click', addProductGroup);
+addPriceRuleButton.addEventListener('click', addPriceRule);
+runListEl.addEventListener('click', openRunFromList);
+monitoringAlertsEl.addEventListener('click', openRunFromList);
+saasBlockersEl.addEventListener('click', openRunFromList);
+reviewListEl.addEventListener('click', handleReviewQueueClick);
+sendReviewDigestButton.addEventListener('click', sendReviewDigest);
+runDetailCloseEl.addEventListener('click', () => {
+  runDetailEl.hidden = true;
+});
+productGroupsEl.addEventListener('input', handleProductGroupsChange);
+productGroupsEl.addEventListener('change', handleProductGroupsChange);
+productGroupsEl.addEventListener('click', removeProductGroup);
+priceRulesEl.addEventListener('input', () => schedulePreview());
+priceRulesEl.addEventListener('change', () => schedulePreview());
+priceRulesEl.addEventListener('click', removePriceRule);
+loginForm.addEventListener('submit', login);
+form.addEventListener('input', () => schedulePreview());
+form.addEventListener('change', () => schedulePreview());
+
+boot();
+
+async function boot() {
+  hideLocalLoginInProduction();
+  hideLegacyCategoryDiscountInputs();
+  try {
+    await request('/api/auth/me');
+    showApp();
+    await load();
+  } catch {
+    showLogin();
+  }
+}
+
+function hideLegacyCategoryDiscountInputs() {
+  form.querySelectorAll('[name^="pricing.categoryDiscounts."]').forEach((input) => {
+    const label = input.closest('label');
+    if (label) label.hidden = true;
+  });
+}
+
+function hideLocalLoginInProduction() {
+  if (localLoginEl && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
+    localLoginEl.hidden = true;
+  }
+}
+
+async function login(event) {
+  event.preventDefault();
+  await doLogin(loginEmail.value || 'admin@daltec.local', loginPassword.value || 'admin');
+}
+
+async function doLogin(email, password) {
+  loginError.textContent = '';
+  try {
+    await request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email,
+        password
+      })
+    });
+    loginPassword.value = '';
+    showApp();
+    await load();
+  } catch (error) {
+    loginError.textContent = error.message;
+  }
+}
+
+async function logout() {
+  await request('/api/auth/logout', { method: 'POST' }).catch(() => null);
+  showLogin();
+}
+
+function showApp() {
+  appView.hidden = false;
+  loginView.hidden = true;
+}
+
+function showLogin() {
+  appView.hidden = true;
+  loginView.hidden = false;
+}
+
+async function load() {
+  setStatus('Lade Einstellungen...');
+  const settings = await request('/api/settings');
+  currentSettings = structuredClone(settings);
+  fillForm(settings);
+  await refreshSetupStatus();
+  await refreshMonitoring();
+  await refreshSaasReadiness();
+  await refreshReviewQueue();
+  await refreshMailStatus();
+  await refreshDataStatus();
+  await refreshOffers();
+  await refreshRuns();
+  await preview();
+  setStatus('Bereit');
+}
+
+async function save() {
+  setStatus('Speichere...');
+  const saved = await request('/api/settings', {
+    method: 'POST',
+    body: JSON.stringify(readForm())
+  });
+  currentSettings = structuredClone(saved);
+  fillForm(saved);
+  setStatus('Gespeichert');
+  await preview();
+}
+
+async function preview() {
+  setStatus('Erzeuge Vorschau...');
+  const result = await request('/api/preview', {
+    method: 'POST',
+    body: JSON.stringify({ settings: readForm() })
+  });
+  previewFrame.srcdoc = result.html_angebot;
+  setStatus('Vorschau aktuell');
+}
+
+function fillForm(settings, prefix = '') {
+  if (!prefix && settings.pricing?.offerFactor != null) {
+    settings = structuredClone(settings);
+    settings.pricing.discountPercent = Math.round((1 - Number(settings.pricing.offerFactor)) * 100);
+    settings.pricing.vatPercent = Math.round(Number(settings.pricing.vatRate ?? 0.2) * 100);
+    renderProductGroups(settings.pricing);
+    renderPriceRules(settings.pricing.rules || []);
+  }
+  for (const [key, value] of Object.entries(settings)) {
+    const name = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      fillForm(value, name);
+      continue;
+    }
+    const input = form.elements[name];
+    if (input && input.type === 'checkbox') input.checked = value === true;
+    else if (input && isPlaceholderInput(input)) {
+      input.placeholder = value;
+      input.value = '';
+    }
+    else if (input) input.value = value;
+  }
+}
+
+function readForm() {
+  const settings = structuredClone(currentSettings || {});
+  for (const input of form.elements) {
+    if (!input.name) continue;
+    if (isPlaceholderInput(input) && input.value.trim() === '') continue;
+    setNested(settings, input.name, typedValue(input));
+  }
+  if (settings.pricing?.discountPercent != null) {
+    settings.pricing.offerFactor = 1 - Number(settings.pricing.discountPercent) / 100;
+    delete settings.pricing.discountPercent;
+  }
+  if (settings.pricing?.vatPercent != null) {
+    settings.pricing.vatRate = Number(settings.pricing.vatPercent) / 100;
+    delete settings.pricing.vatPercent;
+  }
+  settings.pricing ||= {};
+  const productGroups = readProductGroups();
+  settings.pricing.productGroups = productGroups;
+  settings.pricing.categoryDiscounts = Object.fromEntries(
+    productGroups.map((group) => [group.id, group.discountPercent])
+  );
+  settings.pricing.rules = readPriceRules();
+  settings.mail ||= {};
+  delete settings.mail.cc;
+  delete settings.mail.internalSubject;
+  return settings;
+}
+
+function renderProductGroups(pricing = {}) {
+  const groups = normalizeProductGroups(pricing);
+  productGroupsEl.innerHTML = `
+    <div class="rule-row rule-row-head">
+      <span>Name</span>
+      <span>Schluessel</span>
+      <span>Match-Woerter</span>
+      <span>Rabatt %</span>
+      <span></span>
+    </div>
+    ${groups.map((group) => productGroupRow(group)).join('')}
+  `;
+}
+
+function normalizeProductGroups(pricing = {}) {
+  const configured = Array.isArray(pricing.productGroups) ? pricing.productGroups : [];
+  const discounts = pricing.categoryDiscounts || {};
+  const byId = new Map();
+  for (const group of configured) {
+    if (!group?.id) continue;
+    byId.set(group.id, {
+      ...group,
+      label: group.label || group.id,
+      match: group.match || group.label || group.id,
+      discountPercent: Number(discounts[group.id] ?? group.discountPercent ?? 0),
+      enabled: group.enabled !== false
+    });
+  }
+  for (const [id, percent] of Object.entries(discounts)) {
+    if (!byId.has(id)) {
+      byId.set(id, {
+        id,
+        label: defaultGroupLabel(id),
+        match: defaultGroupMatch(id),
+        discountPercent: Number(percent || 0),
+        enabled: true
+      });
+    }
+  }
+  if (byId.size === 0) {
+    byId.set('anhaenger', { id: 'anhaenger', label: 'Anhaenger', match: 'anhaenger,hochlader,kipper,autotransporter,flatbed', discountPercent: 13, enabled: true });
+    byId.set('ersatzteile', { id: 'ersatzteile', label: 'Ersatzteile', match: 'ersatzteil,ersatzteile,spare part,spare parts', discountPercent: 13, enabled: true });
+    byId.set('zubehoer', { id: 'zubehoer', label: 'Zubehoer', match: 'zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck', discountPercent: 13, enabled: true });
+  }
+  return Array.from(byId.values());
+}
+
+function productGroupRow(group = {}) {
+  return `
+    <div class="rule-row" data-product-group-row>
+      <input data-group-field="label" type="text" value="${escapeHtml(group.label || '')}" placeholder="z.B. Ersatzteile">
+      <input data-group-field="id" type="text" value="${escapeHtml(group.id || '')}" placeholder="ersatzteile">
+      <input data-group-field="match" type="text" value="${escapeHtml(group.match || '')}" placeholder="ersatzteil,schlauch,kupplung">
+      <input data-group-field="discountPercent" type="number" min="0" max="100" step="1" value="${Number(group.discountPercent ?? 0)}">
+      <button type="button" class="icon-button" data-remove-product-group title="Gruppe entfernen">x</button>
+    </div>
+  `;
+}
+
+function readProductGroups() {
+  return Array.from(productGroupsEl.querySelectorAll('[data-product-group-row]'))
+    .map((row) => {
+      const label = row.querySelector('[data-group-field="label"]').value.trim();
+      const id = slugifyGroupId(row.querySelector('[data-group-field="id"]').value || label);
+      return {
+        id,
+        label: label || id,
+        match: row.querySelector('[data-group-field="match"]').value.trim() || label || id,
+        discountPercent: Number(row.querySelector('[data-group-field="discountPercent"]').value || 0),
+        enabled: true
+      };
+    })
+    .filter((group) => group.id);
+}
+
+function defaultGroupLabel(id) {
+  return { anhaenger: 'Anhaenger', ersatzteile: 'Ersatzteile', zubehoer: 'Zubehoer' }[id] || id;
+}
+
+function defaultGroupMatch(id) {
+  return {
+    anhaenger: 'anhaenger,hochlader,kipper,autotransporter,flatbed',
+    ersatzteile: 'ersatzteil,ersatzteile,spare part,spare parts',
+    zubehoer: 'zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck'
+  }[id] || id;
+}
+
+function slugifyGroupId(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/Ã¤/g, 'a')
+    .replace(/Ã¶/g, 'o')
+    .replace(/Ã¼/g, 'u')
+    .replace(/ÃŸ/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function handleProductGroupsChange() {
+  renderPriceRules(readPriceRules());
+  schedulePreview();
+}
+
+function addProductGroup() {
+  const rows = readProductGroups();
+  rows.push({ id: 'neue_gruppe', label: 'Neue Gruppe', match: '', discountPercent: 13, enabled: true });
+  renderProductGroups({
+    productGroups: rows,
+    categoryDiscounts: Object.fromEntries(rows.map((group) => [group.id, group.discountPercent]))
+  });
+  renderPriceRules(readPriceRules());
+  schedulePreview();
+}
+
+function removeProductGroup(event) {
+  if (!event.target.matches('[data-remove-product-group]')) return;
+  event.target.closest('[data-product-group-row]').remove();
+  renderPriceRules(readPriceRules());
+  schedulePreview();
+}
+
+function renderPriceRules(rules = []) {
+  const safeRules = Array.isArray(rules) ? rules : [];
+  priceRulesEl.innerHTML = `
+    <div class="rule-row rule-row-head">
+      <span>Sorte / Produkt</span>
+      <span>Kategorie</span>
+      <span>Basis</span>
+      <span>%</span>
+      <span></span>
+    </div>
+    ${safeRules.map((rule) => priceRuleRow(rule)).join('')}
+  `;
+}
+
+function priceRuleRow(rule = {}) {
+  const category = rule.category || 'alle';
+  const source = rule.source || 'uvp_discount';
+  const groups = readProductGroups().filter((group) => !['anhaenger', 'zubehoer'].includes(group.id));
+  return `
+    <div class="rule-row" data-rule-row>
+      <input data-rule-field="match" type="text" value="${escapeHtml(rule.match || '')}" placeholder="z.B. Hochlader, Plane, 4022">
+      <select data-rule-field="category">
+        ${option('alle', 'Alle', category)}
+        ${groups.map((group) => option(group.id, group.label || group.id, category)).join('')}
+        ${option('anhaenger', 'Anhänger', category)}
+        ${option('zubehoer', 'Zubehör', category)}
+      </select>
+      <select data-rule-field="source">
+        ${option('uvp_discount', 'UVP Rabatt', source)}
+        ${option('ek_markup', 'EK/Lagerwert Aufschlag', source)}
+      </select>
+      <input data-rule-field="percent" type="number" min="0" max="300" step="1" value="${Number(rule.percent ?? 0)}">
+      <button type="button" class="icon-button" data-remove-rule title="Regel entfernen">×</button>
+    </div>
+  `;
+}
+
+function option(value, label, selected) {
+  return `<option value="${value}"${value === selected ? ' selected' : ''}>${label}</option>`;
+}
+
+function readPriceRules() {
+  return Array.from(priceRulesEl.querySelectorAll('[data-rule-row]'))
+    .map((row) => ({
+      match: row.querySelector('[data-rule-field="match"]').value.trim(),
+      category: row.querySelector('[data-rule-field="category"]').value,
+      source: row.querySelector('[data-rule-field="source"]').value,
+      percent: Number(row.querySelector('[data-rule-field="percent"]').value || 0),
+      enabled: true
+    }))
+    .filter((rule) => rule.percent > 0 || rule.match);
+}
+
+function addPriceRule() {
+  const rows = readPriceRules();
+  rows.push({ match: '', category: 'alle', source: 'uvp_discount', percent: 13, enabled: true });
+  renderPriceRules(rows);
+  schedulePreview();
+}
+
+function removePriceRule(event) {
+  if (!event.target.matches('[data-remove-rule]')) return;
+  event.target.closest('[data-rule-row]').remove();
+  schedulePreview();
+}
+
+function typedValue(input) {
+  if (input.type === 'checkbox') return input.checked;
+  if (input.type === 'number') return Number(input.value);
+  return input.value;
+}
+
+function isPlaceholderInput(input) {
+  return input.type === 'text' || input.type === 'email';
+}
+
+async function uploadCsv(kind, selector) {
+  const input = document.querySelector(selector);
+  const file = input.files[0];
+  if (!file) return;
+  setStatus(`Lade ${kind} CSV hoch...`);
+  const response = await fetch(`/api/upload/${kind}`, {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'text/csv' },
+    body: file
+  });
+  input.value = '';
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const messages = result.validation?.errors?.map((error) => error.message).slice(0, 5) || [result.message || result.error || 'CSV Upload fehlgeschlagen'];
+    dataStatusEl.textContent = messages.join(' | ');
+    setStatus('CSV abgelehnt');
+    return;
+  }
+  const warningText = result.validation?.warnings?.length
+    ? ` | Hinweise: ${result.validation.warnings.map((warning) => warning.message).slice(0, 3).join(' | ')}`
+    : '';
+  dataStatusEl.textContent = `CSV gespeichert: ${result.validation?.stats?.rows || 0} Zeilen${warningText}`;
+  await load();
+}
+
+async function refreshSetupStatus() {
+  const setup = await request('/api/setup-status');
+  setupReadyEl.textContent = setup.ready ? 'Bereit für Polling' : 'Setup offen';
+  setupReadyEl.className = setup.ready ? 'ready' : 'open';
+  gmailQueryEl.value = setup.forwarding.query;
+  setupNextEl.textContent = setup.ready
+    ? `Start: ${setup.nextCommands.join(' oder ')}`
+    : setup.forwarding.action;
+  setupChecksEl.innerHTML = setup.checks.map((check) => `
+    <div class="setup-check ${check.done ? 'done' : 'open'}">
+      <i></i>
+      <div>
+        <strong>${escapeHtml(check.label)}</strong>
+        <small>${escapeHtml(check.detail)}</small>
+      </div>
+    </div>
+  `).join('');
+  processStripEl.innerHTML = setup.process.map((item) => `
+    <div class="process-step">
+      <b>${escapeHtml(item.step)}</b>
+      <strong>${escapeHtml(item.title)}</strong>
+      <small>${escapeHtml(item.text)}</small>
+    </div>
+  `).join('');
+}
+
+async function refreshMonitoring() {
+  const snapshot = await request('/api/monitoring');
+  const metrics = snapshot.metrics;
+  monitoringStateEl.textContent = snapshot.alerts.length ? `${snapshot.alerts.length} Warnung(en)` : 'OK';
+  monitoringStateEl.className = snapshot.alerts.some((alert) => alert.level === 'error') ? 'open' : 'ready';
+  monitoringGridEl.innerHTML = [
+    monitorMetric('Runs 24h', metrics.runCount),
+    monitorMetric('Ausgeschlossen', metrics.excludedRunCount),
+    monitorMetric('Verarbeitet', metrics.processedCount),
+    monitorMetric('Owner-Mail', metrics.sentToOwnerCount),
+    monitorMetric('Needs Review', `${metrics.needsReviewCount} (${Math.round(metrics.needsReviewRate * 100)}%)`),
+    monitorMetric('Failed', `${metrics.failedCount} (${Math.round(metrics.failedRate * 100)}%)`),
+    monitorMetric('Duplikate', metrics.duplicateCount),
+    monitorMetric('Verdacht doppelt', metrics.suspectedDuplicateRunCount || 0),
+    monitorMetric('Feedback', metrics.ownerFeedbackCount),
+    monitorMetric('Safe Draft Rate', metrics.safeDraftAcceptanceRate == null ? '-' : `${Math.round(metrics.safeDraftAcceptanceRate * 100)}%`),
+    monitorMetric('CSV Positionen', `${metrics.inventory.itemCount}/${metrics.inventory.minItemCount}`),
+    monitorMetric('CSV Alter', metrics.inventory.ageHours == null ? '-' : `${metrics.inventory.ageHours}h`)
+  ].join('');
+  monitoringAlertsEl.innerHTML = snapshot.alerts.length
+    ? [
+        ...snapshot.alerts.map((alert) => `<div class="monitor-alert ${escapeHtml(alert.level)}">${escapeHtml(alert.message)}</div>`),
+        duplicateGroupsHtml(metrics.suspectedDuplicateGroups || [])
+      ].join('')
+    : '<div class="monitor-alert ok">Keine aktiven Alerts.</div>';
+}
+
+function monitorMetric(label, value) {
+  return `<div class="monitor-metric"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+async function refreshSaasReadiness() {
+  const snapshot = await request('/api/saas-readiness');
+  saasStateEl.textContent = snapshot.sellableSaas
+    ? 'Sellable'
+    : snapshot.daltecDailyUseCandidate ? 'DALTEC Proof' : 'Blockiert';
+  saasStateEl.className = snapshot.sellableSaas ? 'ready' : 'open';
+  saasGridEl.innerHTML = [
+    monitorMetric('Status', snapshot.status),
+    monitorMetric('Storage', snapshot.storageMode),
+    monitorMetric('Proof Runs', `${snapshot.metrics.processedRuns}/${snapshot.metrics.proofTargetRuns}`),
+    monitorMetric('Doppelt-Verdacht', snapshot.metrics.suspectedDuplicateRunCount || 0),
+    monitorMetric('Feedback', `${snapshot.metrics.ownerFeedbackCount}/${snapshot.metrics.ownerFeedbackTarget}`),
+    monitorMetric('Safe Draft', snapshot.metrics.safeDraftAcceptanceRate == null ? '-' : `${Math.round(snapshot.metrics.safeDraftAcceptanceRate * 100)}%`),
+    monitorMetric('Backup', snapshot.runtime?.backup?.latestAgeHours == null ? 'fehlt' : `${snapshot.runtime.backup.latestAgeHours}h alt`)
+  ].join('');
+  const issues = [...(snapshot.blockers || []), ...(snapshot.warnings || [])];
+  saasBlockersEl.innerHTML = issues.length
+    ? [
+        ...issues.map((issue) => `<div class="monitor-alert ${issue.severity === 'p0' ? 'error' : 'warning'}">${escapeHtml(issue.message)}</div>`),
+        duplicateGroupsHtml(snapshot.metrics.recent?.suspectedDuplicateGroups || [])
+      ].join('')
+    : '<div class="monitor-alert ok">Keine SaaS-Blocker aktiv.</div>';
+}
+
+function duplicateGroupsHtml(groups = []) {
+  if (!groups.length) return '';
+  return `
+    <div class="duplicate-groups">
+      ${groups.map((group) => `
+        <article class="duplicate-group">
+          <div>
+            <strong>${escapeHtml(group.customerEmail || 'Unbekannter Kunde')}</strong>
+            <small>${escapeHtml(group.extraRuns || 0)} extra Run(s) | ${formatMoney(group.totalGross)}</small>
+          </div>
+          <div class="button-row compact-buttons">
+            ${(group.runIds || []).map((runId, index) => `
+              <button type="button" class="secondary" data-run-id="${escapeHtml(runId)}">Run ${index + 1}</button>
+            `).join('')}
+          </div>
+        </article>
+      `).join('')}
+    </div>
+  `;
+}
+
+async function refreshReviewQueue() {
+  const queue = await request('/api/review-queue');
+  reviewStateEl.textContent = `${queue.openCount} offen | ${queue.feedbackCount}/${queue.targetFeedbackCount} Feedbacks`;
+  reviewStateEl.className = queue.openCount ? 'open' : 'ready';
+  reviewListEl.innerHTML = queue.items.length
+    ? queue.items.slice(0, 12).map(reviewQueueItemHtml).join('')
+    : '<div class="monitor-alert ok">Keine offenen Drafts ohne Feedback.</div>';
+}
+
+function reviewQueueItemHtml(item) {
+  const warningText = item.warnings?.length ? item.warnings.join(', ') : 'keine Warnungen';
+  return `
+    <article class="review-item ${item.errorCode ? 'needs-review' : ''}">
+      <button type="button" class="review-main" data-run-id="${escapeHtml(item.id)}">
+        <strong>${escapeHtml(item.customerName || item.customerEmail || 'Unbekannter Kunde')}</strong>
+        <small>${escapeHtml(item.errorMessage || item.match?.matched || item.subject || item.id)}</small>
+        <span>${escapeHtml(item.status)} | ${formatMoney(item.totalGross)} | ${escapeHtml(item.match?.confidence || '-')}</span>
+      </button>
+      <div class="review-meta">
+        <small>${escapeHtml(warningText)}</small>
+        <div class="button-row compact-buttons">
+          <button type="button" data-quick-feedback="sendable" data-run-id="${escapeHtml(item.id)}">Sendbar</button>
+          <button type="button" class="secondary" data-quick-feedback="minor_correction" data-run-id="${escapeHtml(item.id)}">Korrektur</button>
+          <button type="button" class="danger" data-quick-feedback="wrong" data-run-id="${escapeHtml(item.id)}">Falsch</button>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+async function handleReviewQueueClick(event) {
+  const feedbackButton = event.target.closest('[data-quick-feedback]');
+  if (feedbackButton) {
+    await submitOwnerFeedback(feedbackButton.dataset.runId, feedbackButton.dataset.quickFeedback, { renderDetail: false });
+    return;
+  }
+  const openButton = event.target.closest('[data-run-id]');
+  if (openButton) await renderRunDetail(openButton.dataset.runId);
+}
+
+async function sendReviewDigest() {
+  sendReviewDigestButton.disabled = true;
+  setStatus('Sende Review Digest...');
+  try {
+    const result = await request('/api/review-queue/digest', {
+      method: 'POST',
+      body: JSON.stringify({ limit: 20 })
+    });
+    setStatus(result.delivered ? `Review Digest gesendet: ${result.count}` : `Review Digest nicht gesendet: ${result.reason || result.count}`);
+  } finally {
+    sendReviewDigestButton.disabled = false;
+  }
+}
+
+async function refreshMailStatus() {
+  const status = await request('/api/mail/status');
+  const gmailText = status.gmail.connected
+    ? `Gmail verbunden${status.gmail.email ? `: ${status.gmail.email}` : ''}`
+    : status.gmail.configured ? 'Gmail bereit zum Verbinden' : 'Gmail OAuth App fehlt';
+  const outlookText = status.outlook.connected
+    ? `Outlook verbunden${status.outlook.email ? `: ${status.outlook.email}` : ''}`
+    : status.outlook.configured ? 'Outlook bereit zum Verbinden' : 'Outlook OAuth App fehlt';
+  mailStatusEl.textContent = `${gmailText} | ${outlookText}`;
+  gmailConnectEl.textContent = status.gmail.connected ? 'Gmail neu verbinden' : 'Gmail verbinden';
+  outlookConnectEl.textContent = status.outlook.connected ? 'Outlook neu verbinden' : 'Outlook verbinden';
+  setConnectLinkState(gmailConnectEl, status.gmail.configured);
+  setConnectLinkState(outlookConnectEl, status.outlook.configured);
+}
+
+function setConnectLinkState(link, enabled) {
+  link.classList.toggle('disabled-link', !enabled);
+  link.setAttribute('aria-disabled', String(!enabled));
+  link.tabIndex = enabled ? 0 : -1;
+}
+
+function preventDisabledLink(event) {
+  if (event.currentTarget.getAttribute('aria-disabled') === 'true') {
+    event.preventDefault();
+  }
+}
+
+async function copyGmailQuery() {
+  await navigator.clipboard.writeText(gmailQueryEl.value);
+  copyQueryButton.textContent = 'Kopiert';
+  setTimeout(() => {
+    copyQueryButton.textContent = 'Regel kopieren';
+  }, 1200);
+}
+
+async function refreshOffers() {
+  const offers = await request('/api/offers');
+  offerCountEl.textContent = String(offers.length);
+  offerListEl.innerHTML = offers.length
+    ? offers.slice(0, 5).map((offer) => `
+      <div class="offer-item">
+        <div class="offer-main">
+          <strong>${escapeHtml([offer.customer.firstName, offer.customer.lastName].filter(Boolean).join(' ') || offer.customer.email || 'Kunde')}</strong>
+          <small>${escapeHtml(offer.source.subject || offer.offer.subject || 'Eduard Angebot')}</small>
+        </div>
+        <span class="offer-total">${formatMoney(offer.offer.totalGross)}</span>
+      </div>
+    `).join('')
+    : '<div class="status">Noch keine gespeicherten Angebote</div>';
+}
+
+async function refreshRuns() {
+  const runs = await request('/api/runs');
+  runCountEl.textContent = String(runs.length);
+  runListEl.innerHTML = runs.length
+    ? runs.slice(0, 8).map((run) => `
+      <button type="button" class="offer-item run-item" data-run-id="${escapeHtml(run.id)}">
+        <div class="offer-main">
+          <strong>${escapeHtml(run.summary?.customerName || run.summary?.customerEmail || run.inbound_message_id || 'Run')}</strong>
+          <small>${escapeHtml(run.error_message || run.summary?.topInventoryName || run.id)}</small>
+        </div>
+        <span class="run-status ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>
+      </button>
+    `).join('')
+    : '<div class="status">Noch keine Verarbeitungen</div>';
+}
+
+async function openRunFromList(event) {
+  const button = event.target.closest('[data-run-id]');
+  if (!button) return;
+  await renderRunDetail(button.dataset.runId);
+}
+
+async function renderRunDetail(runId) {
+  setStatus('Lade Run Debug...');
+  const run = await request(`/api/offer-runs/${encodeURIComponent(runId)}`);
+  runDetailBodyEl.innerHTML = runDetailHtml(run);
+  runDetailEl.hidden = false;
+  runDetailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const draftFrame = runDetailBodyEl.querySelector('[data-draft-frame]');
+  if (draftFrame) draftFrame.srcdoc = run.draft?.html_body || run.draft_html || '';
+  runDetailBodyEl.querySelectorAll('[data-feedback]').forEach((button) => {
+    button.addEventListener('click', () => submitOwnerFeedback(run.id, button.dataset.feedback));
+  });
+  setStatus('Run Debug geladen');
+}
+
+function runDetailHtml(run) {
+  const feedback = run.owner_feedback || run.summary?.ownerFeedback || null;
+  return `
+    <div class="debug-summary">
+      ${debugMetric('Status', run.status)}
+      ${debugMetric('Fehler', [run.error_code, run.error_message].filter(Boolean).join(': ') || 'kein Fehler')}
+      ${debugMetric('Kunde', run.summary?.customerName || run.summary?.customerEmail || '-')}
+      ${debugMetric('Summe', formatMoney(run.summary?.totalGross))}
+      ${debugMetric('Match', `${run.summary?.matchType || '-'} / ${Math.round(Number(run.summary?.matchConfidence || 0) * 100)}%`)}
+      ${debugMetric('Feedback', feedback ? feedbackLabel(feedback.rating) : 'offen')}
+    </div>
+
+    <div class="feedback-panel">
+      <strong>Owner Feedback</strong>
+      <div class="button-row">
+        <button type="button" data-feedback="sendable">Sendbar</button>
+        <button type="button" class="secondary" data-feedback="minor_correction">Kleine Korrektur nötig</button>
+        <button type="button" class="danger" data-feedback="wrong">Falsch</button>
+      </div>
+      <label>Notiz <input data-feedback-notes type="text" placeholder="z.B. Preis falsch, Match falsch, Text ok"></label>
+      <small>${feedback ? `Gespeichert: ${escapeHtml(feedbackLabel(feedback.rating))} ${escapeHtml(feedback.notes || '')}` : 'Noch keine Bewertung gespeichert.'}</small>
+    </div>
+
+    <div class="debug-grid">
+      ${debugBlock('Input Snapshot', run.inbound_message)}
+      ${debugBlock('Config Snapshot', run.config_snapshot)}
+      ${debugBlock('Parsed Customer', run.customer_json)}
+      ${debugBlock('Line Items', run.line_items_json)}
+      ${debugBlock('Pricing Snapshot', run.pricing_json)}
+      ${debugBlock('Match Snapshot', run.match_json)}
+      ${debugBlock('Events', run.events)}
+    </div>
+
+    <div class="debug-draft">
+      <div class="panel-head compact">
+        <strong>Draft Snapshot</strong>
+        <span>${escapeHtml(run.draft?.subject || run.draft_subject || '')}</span>
+      </div>
+      <iframe data-draft-frame title="Run Draft"></iframe>
+    </div>
+  `;
+}
+
+function debugMetric(label, value) {
+  return `<div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function debugBlock(title, value) {
+  return `
+    <section class="debug-block">
+      <strong>${escapeHtml(title)}</strong>
+      <pre>${escapeHtml(JSON.stringify(value ?? null, null, 2))}</pre>
+    </section>
+  `;
+}
+
+function feedbackLabel(rating) {
+  return {
+    sendable: 'Sendbar',
+    minor_correction: 'Kleine Korrektur nötig',
+    wrong: 'Falsch'
+  }[rating] || rating || '-';
+}
+
+async function submitOwnerFeedback(runId, rating, options = {}) {
+  const notes = runDetailBodyEl.querySelector('[data-feedback-notes]')?.value || '';
+  await request(`/api/offer-runs/${encodeURIComponent(runId)}/feedback`, {
+    method: 'POST',
+    body: JSON.stringify({ rating, notes })
+  });
+  if (options.renderDetail !== false) await renderRunDetail(runId);
+  await refreshRuns();
+  await refreshReviewQueue();
+  await refreshMonitoring();
+  await refreshSaasReadiness();
+}
+
+async function refreshDataStatus() {
+  const status = await request('/api/data-status');
+  dataStatusEl.textContent = [
+    `Lager-/Preisdaten: ${status.lagerCsvExists ? 'vorhanden' : 'nicht vorhanden'}`,
+    status.usingLocalCsv ? 'bereit' : 'bitte CSV hochladen'
+  ].join(' | ');
+}
+
+function setNested(target, path, value) {
+  const parts = path.split('.');
+  let cursor = target;
+  for (const part of parts.slice(0, -1)) {
+    cursor[part] ||= {};
+    cursor = cursor[part];
+  }
+  cursor[parts.at(-1)] = value;
+}
+
+async function request(url, options = {}) {
+  const response = await fetch(url, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    if (response.status === 401 && !url.includes('/api/auth/login') && !url.includes('/api/auth/me')) {
+      showLogin();
+    }
+    throw new Error(data.error || response.statusText);
+  }
+  return data;
+}
+
+function setStatus(message) {
+  document.title = message ? `Eduard Admin - ${message}` : 'Eduard Admin';
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(Number(value || 0));
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+let previewTimer;
+
+function schedulePreview() {
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(() => {
+    preview().catch((error) => setStatus(error.message));
+  }, 180);
+}

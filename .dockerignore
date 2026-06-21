@@ -1,0 +1,17 @@
+node_modules
+.git
+.env
+.env.*
+secrets
+data/settings.json
+data/lager.csv
+data/tenant.json
+data/offers.jsonl
+data/inbound_messages.jsonl
+data/offer_runs.jsonl
+data/offer_run_events.jsonl
+data/generated_drafts.jsonl
+data/tenants
+*.log
+admin.out.log
+admin.err.log
