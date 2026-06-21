@@ -18,7 +18,7 @@
     "productGroups": [
       {
         "id": "anhaenger",
-        "label": "Anhaenger",
+        "label": "Anhänger",
         "match": "anhaenger,hochlader,kipper,dreiseiten,rueckwaerts,autotransporter,multitransporter,fahrzeugtransporter,flatbed,cargo",
         "enabled": true
       },
@@ -30,7 +30,7 @@
       },
       {
         "id": "zubehoer",
-        "label": "Zubehoer",
+        "label": "Zubehör",
         "match": "zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,aluminium ramps,aluminum ramps,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck",
         "enabled": true
       }

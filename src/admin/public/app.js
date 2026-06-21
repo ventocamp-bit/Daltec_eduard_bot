@@ -226,8 +226,8 @@ function renderProductGroups(pricing = {}) {
   productGroupsEl.innerHTML = `
     <div class="rule-row rule-row-head">
       <span>Name</span>
-      <span>Schluessel</span>
-      <span>Match-Woerter</span>
+      <span>Schlüssel</span>
+      <span>Match-Wörter</span>
       <span>Rabatt %</span>
       <span></span>
     </div>
@@ -261,9 +261,9 @@ function normalizeProductGroups(pricing = {}) {
     }
   }
   if (byId.size === 0) {
-    byId.set('anhaenger', { id: 'anhaenger', label: 'Anhaenger', match: 'anhaenger,hochlader,kipper,autotransporter,flatbed', discountPercent: 13, enabled: true });
+    byId.set('anhaenger', { id: 'anhaenger', label: 'Anhänger', match: 'anhaenger,hochlader,kipper,autotransporter,flatbed', discountPercent: 13, enabled: true });
     byId.set('ersatzteile', { id: 'ersatzteile', label: 'Ersatzteile', match: 'ersatzteil,ersatzteile,spare part,spare parts', discountPercent: 13, enabled: true });
-    byId.set('zubehoer', { id: 'zubehoer', label: 'Zubehoer', match: 'zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck', discountPercent: 13, enabled: true });
+    byId.set('zubehoer', { id: 'zubehoer', label: 'Zubehör', match: 'zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck', discountPercent: 13, enabled: true });
   }
   return Array.from(byId.values());
 }
@@ -297,7 +297,7 @@ function readProductGroups() {
 }
 
 function defaultGroupLabel(id) {
-  return { anhaenger: 'Anhaenger', ersatzteile: 'Ersatzteile', zubehoer: 'Zubehoer' }[id] || id;
+  return { anhaenger: 'Anhänger', ersatzteile: 'Ersatzteile', zubehoer: 'Zubehör' }[id] || id;
 }
 
 function defaultGroupMatch(id) {
