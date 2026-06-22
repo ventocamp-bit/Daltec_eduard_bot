@@ -190,9 +190,27 @@ p {
   gap: 14px;
 }
 
-.workspace {
+.workbench {
   align-items: start;
+  display: grid;
+  gap: 14px;
   grid-template-columns: minmax(560px, 1.08fr) minmax(360px, 0.92fr);
+}
+
+.content-shell.diagnostics-active .workbench {
+  display: none;
+}
+
+.panel-stack {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.artifact-panel {
+  min-width: 0;
+  position: sticky;
+  top: 18px;
 }
 
 form {
@@ -469,8 +487,8 @@ button.danger {
 iframe {
   background: #ffffff;
   border: 0;
-  height: calc(100vh - 230px);
-  min-height: 540px;
+  height: calc(100vh - 196px);
+  min-height: 560px;
   width: 100%;
 }
 
@@ -885,7 +903,7 @@ iframe {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .workspace,
+  .workbench,
   .settings-layout.two-columns,
   .overview-grid,
   .setup-checks-wide,
@@ -893,6 +911,10 @@ iframe {
   .debug-summary,
   .debug-grid {
     grid-template-columns: 1fr;
+  }
+
+  .artifact-panel {
+    position: static;
   }
 
   .compact-upload {

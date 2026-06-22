@@ -32,7 +32,7 @@
 
         <nav class="sidebar-nav" aria-label="Admin Bereiche">
           <button type="button" class="nav-item active" data-panel-target="review-panel">Review</button>
-          <button type="button" class="nav-item" data-panel-target="customize-panel">Individualisieren</button>
+          <button type="button" class="nav-item" data-panel-target="customize-panel">Texte & Preise</button>
           <button type="button" class="nav-item" data-panel-target="data-panel">Daten & Mail</button>
           <button type="button" class="nav-item" data-panel-target="diagnostics-panel">Diagnose</button>
         </nav>
@@ -50,7 +50,7 @@
           <div>
             <p class="eyebrow">Live Admin</p>
             <h1>Angebote steuern</h1>
-            <p>Links pr&uuml;fen, rechts anpassen. Alles speichert in den Tenant-Settings.</p>
+            <p>Review, Texte, Preise, Mail und Lager in einem Arbeitsbereich.</p>
           </div>
           <div class="header-actions">
             <button id="save">Speichern</button>
@@ -77,36 +77,25 @@
           </div>
         </section>
 
-        <form id="settings-form" accept-charset="UTF-8">
-          <section id="review-panel" class="workspace panel-view active">
-            <div class="preview-panel">
-              <div class="panel-head">
-                <div>
-                  <strong>Mail-Vorschau</strong>
-                  <span>So sieht der aktuelle Entwurf aus.</span>
+        <section class="workbench">
+          <form id="settings-form" class="panel-stack" accept-charset="UTF-8">
+            <section id="review-panel" class="panel-view active">
+              <section class="review-panel">
+                <div class="panel-head">
+                  <div>
+                    <strong>Review Queue</strong>
+                    <span>Offene Drafts bewerten.</span>
+                  </div>
+                  <div class="panel-actions">
+                    <span id="review-state">Pr&uuml;fe...</span>
+                    <button id="send-review-digest" type="button" class="secondary">Digest senden</button>
+                  </div>
                 </div>
-                <span>Live</span>
-              </div>
-              <iframe id="preview-frame" title="Mail Vorschau"></iframe>
-            </div>
-
-            <section class="review-panel">
-              <div class="panel-head">
-                <div>
-                  <strong>Review Queue</strong>
-                  <span>Offene Drafts bewerten.</span>
-                </div>
-                <div class="panel-actions">
-                  <span id="review-state">Pr&uuml;fe...</span>
-                  <button id="send-review-digest" type="button" class="secondary">Digest senden</button>
-                </div>
-              </div>
-              <div id="review-list" class="review-list"></div>
+                <div id="review-list" class="review-list"></div>
+              </section>
             </section>
-          </section>
 
-          <section id="customize-panel" class="panel-view">
-            <div class="settings-layout">
+            <section id="customize-panel" class="panel-view">
               <fieldset class="primary-settings">
                 <legend>Preise</legend>
                 <div class="inline">
@@ -130,14 +119,20 @@
               </fieldset>
 
               <fieldset>
-                <legend>Texte & Marke</legend>
+                <legend>Mailtext</legend>
                 <div class="inline two">
-                  <label>H&auml;ndlername <input name="dealer.name" type="text"></label>
-                  <label>Standort <input name="dealer.locationName" type="text"></label>
                   <label>Lieferzeit <input name="dealer.defaultDeliveryTime" type="text"></label>
                   <label>Abschluss-Satz <input name="mail.copyQuestion" type="text"></label>
                   <label>Gru&szlig; <input name="signature.greeting" type="text"></label>
                   <label>Name <input name="signature.name" type="text"></label>
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>H&auml;ndlerdaten</legend>
+                <div class="inline two">
+                  <label>H&auml;ndlername <input name="dealer.name" type="text"></label>
+                  <label>Standort <input name="dealer.locationName" type="text"></label>
                   <label>Firma <input name="signature.company" type="text"></label>
                   <label>Telefon <input name="signature.phone" type="text"></label>
                   <label>E-Mail <input name="signature.email" type="text"></label>
@@ -155,57 +150,67 @@
                   <label>Text <input name="table.textColor" type="color"></label>
                 </div>
               </fieldset>
-            </div>
-          </section>
-
-          <section id="data-panel" class="panel-view">
-            <div class="settings-layout two-columns">
-              <fieldset>
-                <legend>Mail Eingang</legend>
-                <div class="setup-actions">
-                  <label>Gmail-Regel <input id="gmail-query" type="text" readonly></label>
-                  <div class="connector-grid">
-                    <a id="gmail-connect" class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
-                    <a id="outlook-connect" class="button-link secondary-link" href="/api/oauth/microsoft/start">Outlook verbinden</a>
-                  </div>
-                  <div class="status" id="mail-status">Mailstatus wird geladen...</div>
-                  <div class="button-row">
-                    <a class="button-link secondary-link" href="/api/sample-csv">Muster-CSV</a>
-                    <button id="copy-query" type="button" class="secondary">Regel kopieren</button>
-                  </div>
-                  <div class="status" id="setup-next">CSV laden, Mail verbinden, Polling starten.</div>
-                </div>
-              </fieldset>
-
-              <fieldset>
-                <legend>Interne Mail</legend>
-                <div class="inline two">
-                  <label>Empf&auml;nger intern <input name="mail.to" type="email"></label>
-                  <label>Betreff intern <input name="mail.subject" type="text"></label>
-                  <label>Antwortmodus
-                    <select name="mail.deliveryMode">
-                      <option value="owner_review">Intern pr&uuml;fen</option>
-                      <option value="customer_auto">Direkt an Kunden</option>
-                    </select>
-                  </label>
-                </div>
-              </fieldset>
-            </div>
-
-            <section class="setup-panel">
-              <div class="panel-head">
-                <div>
-                  <strong>Schnellstart</strong>
-                  <span>Was noch fehlt, bis der Tenant arbeitet.</span>
-                </div>
-                <span id="setup-ready">Pr&uuml;fe Setup...</span>
-              </div>
-              <div id="setup-checks" class="setup-checks setup-checks-wide"></div>
             </section>
-          </section>
-        </form>
 
-        <section id="diagnostics-panel" class="panel-view">
+            <section id="data-panel" class="panel-view">
+              <div class="settings-layout two-columns">
+                <fieldset>
+                  <legend>Mail Eingang</legend>
+                  <div class="setup-actions">
+                    <label>Gmail-Regel <input id="gmail-query" type="text" readonly></label>
+                    <div class="connector-grid">
+                      <a id="gmail-connect" class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
+                      <a id="outlook-connect" class="button-link secondary-link" href="/api/oauth/microsoft/start">Outlook verbinden</a>
+                    </div>
+                    <div class="status" id="mail-status">Mailstatus wird geladen...</div>
+                    <div class="button-row">
+                      <a class="button-link secondary-link" href="/api/sample-csv">Muster-CSV</a>
+                      <button id="copy-query" type="button" class="secondary">Regel kopieren</button>
+                    </div>
+                    <div class="status" id="setup-next">CSV laden, Mail verbinden, Polling starten.</div>
+                  </div>
+                </fieldset>
+
+                <fieldset>
+                  <legend>Interne Mail</legend>
+                  <div class="inline two">
+                    <label>Empf&auml;nger intern <input name="mail.to" type="email"></label>
+                    <label>Betreff intern <input name="mail.subject" type="text"></label>
+                    <label>Antwortmodus
+                      <select name="mail.deliveryMode">
+                        <option value="owner_review">Intern pr&uuml;fen</option>
+                        <option value="customer_auto">Direkt an Kunden</option>
+                      </select>
+                    </label>
+                  </div>
+                </fieldset>
+              </div>
+
+              <section class="setup-panel">
+                <div class="panel-head">
+                  <div>
+                    <strong>Schnellstart</strong>
+                    <span>Tenant-Setup.</span>
+                  </div>
+                  <span id="setup-ready">Pr&uuml;fe Setup...</span>
+                </div>
+                <div id="setup-checks" class="setup-checks setup-checks-wide"></div>
+              </section>
+            </section>
+          </form>
+
+          <aside class="artifact-panel preview-panel">
+            <div class="panel-head">
+              <div>
+                <strong>Mail-Vorschau</strong>
+                <span id="preview-state-label">Live</span>
+              </div>
+            </div>
+            <iframe id="preview-frame" title="Mail Vorschau"></iframe>
+          </aside>
+        </section>
+
+        <section id="diagnostics-panel" class="panel-view diagnostics-view">
           <section class="monitor-panel">
             <div class="panel-head">
               <strong>Monitoring</strong>

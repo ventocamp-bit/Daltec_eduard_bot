@@ -46,6 +46,7 @@ const priceRulesEl = document.querySelector('#price-rules');
 const addPriceRuleButton = document.querySelector('#add-price-rule');
 const navButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
 const panelViews = Array.from(document.querySelectorAll('.panel-view'));
+const contentShell = document.querySelector('.content-shell');
 let currentSettings = {};
 
 document.querySelector('#save').addEventListener('click', save);
@@ -81,6 +82,7 @@ function activatePanel(panelId) {
   panelViews.forEach((panel) => {
     panel.classList.toggle('active', panel.id === panelId);
   });
+  contentShell.classList.toggle('diagnostics-active', panelId === 'diagnostics-panel');
   navButtons.forEach((button) => {
     button.classList.toggle('active', button.dataset.panelTarget === panelId);
   });
