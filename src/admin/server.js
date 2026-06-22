@@ -26,7 +26,7 @@ import { buildRuntimeReadiness } from '../production-readiness.js';
 import { exportGmailMessages } from '../export-mails.js';
 import { extractInquiry } from '../core/parser.js';
 import { resolveProductCategory } from '../core/pricing.js';
-import { createImapPollerRegistry, testImapConnection } from '../core/imap-poller.js';
+import { createImapPollerRegistry, resolveImapHost, testImapConnection } from '../core/imap-poller.js';
 import { listInventoryImports } from '../inventory-import.js';
 import { processMailMessage } from '../index.js';
 import {
@@ -548,15 +548,19 @@ export function createAdminApp(options = {}) {
   });
 
   app.post('/api/tenant/:tenantId/imap/connect', async (req, res, next) => {
+  let imapSettings;
   try {
     ensureTenantParam(req);
-    const imapSettings = normalizeImapPayload(req.body || {});
+    imapSettings = normalizeImapPayload(req.body || {});
     await (imap.testConnection || testImapConnection)(imapSettings);
     const settings = await loadSettings(req.tenantContext);
     await saveSettings({ ...settings, imap: imapSettings }, req.tenantContext);
     await imap.startTenant?.(req.params.tenantId);
     res.json({ ok: true, active: imap.isActive ? imap.isActive(req.params.tenantId) : true });
   } catch (error) {
+    if (imapSettings?.host && !String(error.message || '').includes(imapSettings.host)) {
+      error.message = `${error.message} host=${imapSettings.host}`;
+    }
     next(error);
   }
   });
@@ -813,7 +817,7 @@ function normalizeImapPayload(input = {}) {
   return {
     email,
     app_password: appPassword,
-    ...(input.host ? { host: String(input.host).trim() } : {}),
+    host: resolveImapHost({ email, host: input.host }),
     ...(input.port ? { port: Number(input.port) } : {}),
     ...(typeof input.tls === 'boolean' ? { tls: input.tls } : {})
   };

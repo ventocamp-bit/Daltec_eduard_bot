@@ -6,11 +6,36 @@ const DEFAULT_IMAP = {
   tls: true
 };
 
+export const IMAP_HOSTS = {
+  'outlook.com': 'imap.outlook.com',
+  'hotmail.com': 'imap.outlook.com',
+  'live.com': 'imap.outlook.com',
+  'msn.com': 'imap.outlook.com',
+  'gmail.com': 'imap.gmail.com',
+  'gmx.at': 'imap.gmx.net',
+  'gmx.net': 'imap.gmx.net',
+  'gmx.de': 'imap.gmx.net',
+  'drei.at': 'imap.drei.at',
+  'a1.net': 'imap.a1.net',
+  '1und1.de': 'imap.1und1.de',
+  'ionos.at': 'imap.ionos.at',
+  'icloud.com': 'imap.mail.me.com',
+  'me.com': 'imap.mail.me.com'
+};
+
 export function redactImapSettings(imap = {}) {
   const redacted = { ...imap };
   if ('app_password' in redacted) redacted.app_password = '***';
   if ('password' in redacted) redacted.password = '***';
   return redacted;
+}
+
+export function resolveImapHost(imap = {}) {
+  const explicitHost = String(imap.host || '').trim();
+  if (explicitHost) return explicitHost;
+  const domain = String(imap.email || '').split('@').pop()?.trim().toLowerCase();
+  if (!domain || domain === String(imap.email || '').trim().toLowerCase()) return DEFAULT_IMAP.host;
+  return IMAP_HOSTS[domain] || `imap.${domain}`;
 }
 
 export async function testImapConnection(imap = {}, options = {}) {
@@ -132,7 +157,7 @@ function buildImapConfig(imap = {}) {
     imap: {
       user: String(imap.email || ''),
       password: String(imap.app_password || ''),
-      host: imap.host || DEFAULT_IMAP.host,
+      host: resolveImapHost(imap),
       port: Number(imap.port || DEFAULT_IMAP.port),
       tls: imap.tls !== false,
       authTimeout: 10_000

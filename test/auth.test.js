@@ -334,15 +334,17 @@ test('imap connect stores settings and disconnect removes credentials', async ()
     const bad = await fetch(`${baseUrl}/api/tenant/${tenantId}/imap/connect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie, 'X-Forwarded-Host': 'imap.example.at' },
-      body: JSON.stringify({ email: 'anfragen@example.at', app_password: 'wrong-app-password' })
+      body: JSON.stringify({ email: 'anfragen@drei.at', app_password: 'wrong-app-password' })
     });
     assert.equal(bad.status, 401);
-    assert.match(await bad.text(), /imap_auth_failed/);
+    const badText = await bad.text();
+    assert.match(badText, /imap_auth_failed/);
+    assert.match(badText, /imap\.drei\.at/);
 
     const connected = await fetch(`${baseUrl}/api/tenant/${tenantId}/imap/connect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie, 'X-Forwarded-Host': 'imap.example.at' },
-      body: JSON.stringify({ email: 'anfragen@example.at', app_password: 'correct-app-password', host: 'imap.example.at' })
+      body: JSON.stringify({ email: 'anfragen@drei.at', app_password: 'correct-app-password' })
     });
     assert.equal(connected.status, 200);
     assert.deepEqual(await connected.json(), { ok: true, active: true });
@@ -350,9 +352,9 @@ test('imap connect stores settings and disconnect removes credentials', async ()
 
     const settingsPath = path.join('data', 'tenants', tenantId, 'settings.json');
     const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
-    assert.equal(settings.imap.email, 'anfragen@example.at');
+    assert.equal(settings.imap.email, 'anfragen@drei.at');
     assert.equal(settings.imap.app_password, 'correct-app-password');
-    assert.equal(settings.imap.host, 'imap.example.at');
+    assert.equal(settings.imap.host, 'imap.drei.at');
 
     const disconnected = await fetch(`${baseUrl}/api/tenant/${tenantId}/imap/disconnect`, {
       method: 'DELETE',

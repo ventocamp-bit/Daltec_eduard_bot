@@ -4,6 +4,7 @@ import {
   createImapPoller,
   fetchUnseenImapMessages,
   redactImapSettings,
+  resolveImapHost,
   testImapConnection
 } from '../src/core/imap-poller.js';
 
@@ -75,9 +76,28 @@ test('fetchUnseenImapMessages reads only UNSEEN and marks messages seen', async 
   assert.equal(messages.length, 1);
   assert.deepEqual(calls.find((call) => call.type === 'search').criteria, ['UNSEEN']);
   assert.equal(calls.find((call) => call.type === 'search').options.markSeen, true);
-  assert.equal(calls.find((call) => call.type === 'connect').config.imap.host, 'imap.outlook.com');
+  assert.equal(calls.find((call) => call.type === 'connect').config.imap.host, 'imap.example.at');
   assert.equal(calls.find((call) => call.type === 'connect').config.imap.port, 993);
   assert.equal(calls.find((call) => call.type === 'connect').config.imap.tls, true);
+});
+
+test('imap host is resolved from email domain with known providers and fallback', () => {
+  assert.equal(resolveImapHost({ email: 'inbox@outlook.com' }), 'imap.outlook.com');
+  assert.equal(resolveImapHost({ email: 'inbox@gmail.com' }), 'imap.gmail.com');
+  assert.equal(resolveImapHost({ email: 'inbox@drei.at' }), 'imap.drei.at');
+  assert.equal(resolveImapHost({ email: 'inbox@autohaus.at' }), 'imap.autohaus.at');
+});
+
+test('imap host from body overrides email domain autodetect', async () => {
+  const calls = [];
+  await fetchUnseenImapMessages(
+    { email: 'inbox@gmail.com', app_password: 'secret', host: 'imap.custom.at' },
+    {
+      connect: async (config) => fakeImapConnection([], calls, config)
+    }
+  );
+
+  assert.equal(calls.find((call) => call.type === 'connect').config.imap.host, 'imap.custom.at');
 });
 
 function fakeImapConnection(messages, calls = [], config = null) {

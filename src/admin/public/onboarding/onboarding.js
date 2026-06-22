@@ -156,16 +156,19 @@ async function connectImap() {
   }
 
   const formData = new FormData(imapForm);
+  const host = String(formData.get('host') || '').trim();
+  const payload = {
+    email: String(formData.get('email') || '').trim(),
+    app_password: String(formData.get('app_password') || '').trim()
+  };
+  if (host) payload.host = host;
   connectImapButton.disabled = true;
   connectImapButton.textContent = 'Verbindung wird getestet...';
   hideImapResult();
   try {
     await request(`/api/tenant/${encodeURIComponent(tenantId)}/imap/connect`, {
       method: 'POST',
-      body: JSON.stringify({
-        email: String(formData.get('email') || '').trim(),
-        app_password: String(formData.get('app_password') || '').trim()
-      })
+      body: JSON.stringify(payload)
     });
     showImapResult('ok', '✅ Verbunden! Eduard liest deine Mails alle 5 Minuten automatisch.');
     imapForm.reset();
