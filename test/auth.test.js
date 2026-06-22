@@ -8,7 +8,8 @@ import {
   findReplayDuplicateIds,
   findSuspectedDuplicateGroups,
   getProofTargetRuns,
-  isArchivedProofRun
+  isArchivedProofRun,
+  tenantIdFromHost
 } from '../src/admin/server.js';
 import { createFeedbackToken } from '../src/feedback-token.js';
 import { inspectRuntimeReadiness } from '../src/production-readiness.js';
@@ -141,6 +142,54 @@ test('readiness archives ignored proof runs', () => {
 test('readiness proof target can be configured by environment', () => {
   assert.equal(getProofTargetRuns({ PROOF_TARGET_RUNS: '62' }), 62);
   assert.equal(getProofTargetRuns({}), 100);
+});
+
+test('admin tenant is selected from host header', async () => {
+  assert.equal(tenantIdFromHost('angebote.daltec.at'), 'daltec-local');
+  assert.equal(tenantIdFromHost('angebote.haemmerle.at'), 'haemmerle-local');
+  assert.equal(tenantIdFromHost('unknown.example.at'), 'daltec-local');
+  assert.equal(tenantIdFromHost('kunden.example.at', { TENANT_HOST_MAP: 'kunden.example.at=kunden-local' }), 'kunden-local');
+
+  const passwordHash = createPasswordHash('secret-pass');
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret: 'host-session-secret',
+      cookieName: 'host_session',
+      secureCookie: false
+    },
+    gmailProofAnalyzer: async (options) => {
+      assert.equal(options.tenantId, 'haemmerle-local');
+      return { messageCount: 0, messages: [], productsByCategory: {} };
+    }
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-Host': 'angebote.haemmerle.at' },
+      body: JSON.stringify({ email: 'owner@example.com', password: 'secret-pass' })
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie');
+
+    const me = await fetch(`${baseUrl}/api/auth/me`, {
+      headers: { Cookie: cookie, 'X-Forwarded-Host': 'angebote.haemmerle.at' }
+    });
+    assert.equal(me.status, 200);
+    assert.equal((await me.json()).tenantId, 'haemmerle-local');
+
+    const proof = await fetch(`${baseUrl}/api/gmail/proof-analysis?limit=1`, {
+      headers: { Cookie: cookie, 'X-Forwarded-Host': 'angebote.haemmerle.at' }
+    });
+    assert.equal(proof.status, 200);
+  } finally {
+    server.close();
+  }
 });
 
 test('admin API requires login session', async () => {

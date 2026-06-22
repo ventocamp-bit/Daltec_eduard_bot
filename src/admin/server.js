@@ -63,6 +63,35 @@ export function getProofTargetRuns(env = process.env) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
 }
 
+export function tenantIdFromHost(hostHeader = '', env = process.env) {
+  const host = String(hostHeader || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, '');
+  const mappings = hostTenantMappings(env);
+  if (host && mappings[host]) return mappings[host];
+  if (host.includes('haemmerle') || host.includes('hammerle')) return 'haemmerle-local';
+  return 'daltec-local';
+}
+
+function hostTenantMappings(env = process.env) {
+  const raw = String(env.TENANT_HOST_MAP || '');
+  return Object.fromEntries(raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [host, tenantId] = entry.split('=').map((part) => String(part || '').trim().toLowerCase());
+      return [host, tenantId];
+    })
+    .filter(([host, tenantId]) => host && tenantId));
+}
+
+function requestTenantId(req, auth) {
+  return tenantIdFromHost(req.headers['x-forwarded-host'] || req.headers.host, process.env) || auth.tenantId || 'daltec-local';
+}
+
 export function createAdminApp(options = {}) {
   const app = express();
   const auth = options.auth || authConfig();
@@ -79,8 +108,9 @@ export function createAdminApp(options = {}) {
       return;
     }
 
-    const { token, session } = createSession(email, auth);
-    res.setHeader('Set-Cookie', sessionCookie(token, auth));
+    const tenantAuth = { ...auth, tenantId: requestTenantId(req, auth) };
+    const { token, session } = createSession(email, tenantAuth);
+    res.setHeader('Set-Cookie', sessionCookie(token, tenantAuth));
     res.json({ email: session.email, expiresAt: session.expiresAt });
   });
 
@@ -91,8 +121,9 @@ export function createAdminApp(options = {}) {
       return;
     }
 
-    const { token } = createSession(email, auth);
-    res.setHeader('Set-Cookie', sessionCookie(token, auth));
+    const tenantAuth = { ...auth, tenantId: requestTenantId(req, auth) };
+    const { token } = createSession(email, tenantAuth);
+    res.setHeader('Set-Cookie', sessionCookie(token, tenantAuth));
     res.redirect('/');
   });
 
@@ -102,8 +133,9 @@ export function createAdminApp(options = {}) {
       return;
     }
 
-    const { token } = createSession(auth.email, auth);
-    res.setHeader('Set-Cookie', sessionCookie(token, auth));
+    const tenantAuth = { ...auth, tenantId: requestTenantId(req, auth) };
+    const { token } = createSession(auth.email, tenantAuth);
+    res.setHeader('Set-Cookie', sessionCookie(token, tenantAuth));
     res.redirect('/');
   });
 
@@ -246,7 +278,7 @@ export function createAdminApp(options = {}) {
       res.status(401).json({ error: 'Nicht angemeldet' });
       return;
     }
-    res.json({ email: session.email, expiresAt: session.expiresAt });
+    res.json({ email: session.email, tenantId: requestTenantId(req, auth), expiresAt: session.expiresAt });
   });
 
   app.get('/api/oauth/google/callback', async (req, res, next) => {
@@ -274,8 +306,9 @@ export function createAdminApp(options = {}) {
       res.status(401).json({ error: 'Nicht angemeldet' });
       return;
     }
-    req.session = session;
-    req.tenantContext = tenantContext({ tenantId: session.tenantId });
+    const tenantId = requestTenantId(req, auth);
+    req.session = { ...session, tenantId };
+    req.tenantContext = tenantContext({ tenantId });
     next();
   });
 
