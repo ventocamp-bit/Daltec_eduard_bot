@@ -52,7 +52,7 @@ export function extractInquiry(raw = {}) {
     const value = stripHtml(cells[1]);
     if (!label || !value || STOP_LABELS.test(label)) continue;
 
-    const priceMatch = value.match(/(â‚¬|€|EUR|\?)\s*([\d.\s]+,\d{2})/i);
+    const priceMatch = value.match(/(€|EUR|\?)\s*([\d.\s]+,\d{2})/i);
     if (!priceMatch) continue;
 
     const price = parseEuroNumber(priceMatch[2].replace(/\s+/g, ''));
@@ -71,7 +71,7 @@ export function extractInquiry(raw = {}) {
       const cleanLine = searchLines[index].trim();
       if (!cleanLine || STOP_LABELS.test(cleanLine)) continue;
 
-      const sameLinePrice = cleanLine.match(/^(.+?)\s+(â‚¬|€|EUR|\?|Kč)\s*([\d.\s]+,\d{2})\s*$/i);
+      const sameLinePrice = cleanLine.match(/^(.+?)\s+(€|EUR|\?|Kč)\s*([\d.\s]+,\d{2})\s*$/i);
       if (sameLinePrice) {
         const product = sameLinePrice[1].trim();
         if (STOP_LABELS.test(product)) continue;
@@ -133,7 +133,7 @@ function extractArticleNumbers(text) {
 
 function attachArticleNumbers(lineItems, articleNumbers) {
   if (!articleNumbers.length || !lineItems.length) return;
-  const trailerIndex = lineItems.findIndex((item) => /anh[aÃƒÂ¤]nger|hochlader|kipper|autotransporter|transporter|flatbed/i.test(item.produkt_name_original || ''));
+  const trailerIndex = lineItems.findIndex((item) => /anh(?:ä|ae|a)nger|hochlader|kipper|autotransporter|transporter|flatbed/i.test(item.produkt_name_original || ''));
   const targetIndex = trailerIndex === -1 ? 0 : trailerIndex;
   lineItems[targetIndex] = {
     ...lineItems[targetIndex],

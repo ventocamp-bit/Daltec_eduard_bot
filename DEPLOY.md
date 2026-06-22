@@ -145,10 +145,10 @@ https://angebote.daltec.at
 
 Dann einloggen und Gmail oder Outlook verbinden.
 
-## 9. SaaS-Readiness pruefen
+## 9. SaaS-Readiness prüfen
 
 ```bash
 docker compose -f docker-compose.n8n-network.yml exec web npm run backup:postgres
 ```
 
-Danach in der Admin-UI `SaaS Readiness` pruefen. Rot bedeutet: nicht extern verkaufen. `DALTEC Proof` bedeutet: interner Betrieb/Proof laeuft, aber SaaS ist noch nicht bewiesen.
+Danach in der Admin-UI `SaaS Readiness` prüfen. Rot bedeutet: nicht extern verkaufen. `DALTEC Proof` bedeutet: interner Betrieb/Proof läuft, aber SaaS ist noch nicht bewiesen.

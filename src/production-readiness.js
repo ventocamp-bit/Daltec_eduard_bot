@@ -27,15 +27,15 @@ export function inspectRuntimeReadiness({ env = process.env, config = {}, settin
   const deliveryMode = settings.mail?.deliveryMode || 'owner_review';
   const checks = [
     check('node_env_production', env.NODE_ENV === 'production', 'NODE_ENV=production ist gesetzt.', 'NODE_ENV ist nicht production.'),
-    check('https_base_url', /^https:\/\//i.test(appBaseUrl), 'APP_BASE_URL nutzt HTTPS.', 'APP_BASE_URL muss fuer SaaS HTTPS nutzen.'),
+    check('https_base_url', /^https:\/\//i.test(appBaseUrl), 'APP_BASE_URL nutzt HTTPS.', 'APP_BASE_URL muss für SaaS HTTPS nutzen.'),
     check('postgres_enabled', Boolean(env.DATABASE_URL), 'Postgres ist aktiv.', 'DATABASE_URL fehlt. JSONL ist kein SaaS-Storage.'),
-    check('admin_password_hashed', Boolean(adminPasswordHash), 'Admin-Passwort ist gehasht.', 'ADMIN_PASSWORD_HASH fehlt. Plain ADMIN_PASSWORD ist fuer SaaS nicht genug.'),
+    check('admin_password_hashed', Boolean(adminPasswordHash), 'Admin-Passwort ist gehasht.', 'ADMIN_PASSWORD_HASH fehlt. Plain ADMIN_PASSWORD ist für SaaS nicht genug.'),
     check('admin_password_not_default', Boolean(adminPasswordHash) || isStrongSecret(adminPassword, 18), 'Admin-Passwort ist nicht trivial.', 'Admin-Passwort ist Default/zu kurz.'),
     check('session_secret_strong', isStrongSecret(sessionSecret, 32), 'Session Secret ist stark.', 'ADMIN_SESSION_SECRET fehlt, ist Default oder zu kurz.'),
     check('ingest_secret_strong', isStrongSecret(ingestSecret, 32), 'Inbound Secret ist stark.', 'EDUARD_INGEST_SECRET fehlt, ist Default oder zu kurz.'),
     check('postgres_password_strong', !postgresPassword || isStrongSecret(postgresPassword, 24), 'Postgres Passwort ist nicht Default.', 'POSTGRES_PASSWORD ist Default/zu kurz.'),
     check('backup_recent', backup.configured && backup.latestAgeHours !== null && backup.latestAgeHours <= backup.maxAgeHours, 'Postgres Backup ist aktuell.', 'Kein aktuelles Postgres Backup gefunden.'),
-    check('owner_review_only', deliveryMode !== 'customer_auto', 'Kundenversand ist blockiert.', 'Direkter Kundenversand ist aktiv. Fuer Proof/SaaS muss Owner-Review Standard sein.'),
+    check('owner_review_only', deliveryMode !== 'customer_auto', 'Kundenversand ist blockiert.', 'Direkter Kundenversand ist aktiv. Für Proof/SaaS muss Owner-Review Standard sein.'),
     check('mail_connected', Boolean(mailStatus.gmail?.connected || mailStatus.outlook?.connected), 'Mailzugang ist verbunden.', 'Kein Gmail/Outlook Zugriff verbunden.'),
     check('oauth_verified_or_forwarding', env.GOOGLE_OAUTH_VERIFIED === 'true' || env.SAAS_MAIL_MODE === 'central_forwarding', 'OAuth/Forwarding ist SaaS-tauglich markiert.', 'Google OAuth ist nicht als verifiziert markiert. Kunden sehen sonst den Warnscreen.')
   ];
@@ -53,14 +53,14 @@ export function inspectRuntimeReadiness({ env = process.env, config = {}, settin
     warnings.push({
       code: 'central_forwarding_mode',
       severity: 'p1',
-      message: 'Self-Service OAuth ist umgangen. Das ist schnell fuer Piloten, aber noch kein echter Zero-Touch-Gmail-Onboarding-Flow.'
+      message: 'Self-Service OAuth ist umgangen. Das ist schnell für Piloten, aber noch kein echter Zero-Touch-Gmail-Onboarding-Flow.'
     });
   }
   if (adminPassword && !adminPasswordHash) {
     warnings.push({
       code: 'plain_admin_password_env',
       severity: 'p1',
-      message: 'ADMIN_PASSWORD funktioniert, aber fuer SaaS sollte nur ADMIN_PASSWORD_HASH genutzt werden.'
+      message: 'ADMIN_PASSWORD funktioniert, aber für SaaS sollte nur ADMIN_PASSWORD_HASH genutzt werden.'
     });
   }
 

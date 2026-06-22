@@ -34,7 +34,6 @@ const overviewFeedbackEl = document.querySelector('#overview-feedback');
 const overviewFeedbackDetailEl = document.querySelector('#overview-feedback-detail');
 const gmailQueryEl = document.querySelector('#gmail-query');
 const copyQueryButton = document.querySelector('#copy-query');
-const processStripEl = document.querySelector('#process-strip');
 const mailStatusEl = document.querySelector('#mail-status');
 const gmailConnectEl = document.querySelector('#gmail-connect');
 const outlookConnectEl = document.querySelector('#outlook-connect');
@@ -267,9 +266,9 @@ function normalizeProductGroups(pricing = {}) {
     }
   }
   if (byId.size === 0) {
-    byId.set('anhaenger', { id: 'anhaenger', label: 'Anhänger', match: 'anhaenger,hochlader,kipper,autotransporter,flatbed', discountPercent: 13, enabled: true });
+    byId.set('anhaenger', { id: 'anhaenger', label: 'Anhänger', match: 'anhaenger,anhänger,hochlader,kipper,autotransporter,flatbed', discountPercent: 13, enabled: true });
     byId.set('ersatzteile', { id: 'ersatzteile', label: 'Ersatzteile', match: 'ersatzteil,ersatzteile,spare part,spare parts', discountPercent: 13, enabled: true });
-    byId.set('zubehoer', { id: 'zubehoer', label: 'Zubehör', match: 'zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck', discountPercent: 13, enabled: true });
+    byId.set('zubehoer', { id: 'zubehoer', label: 'Zubehör', match: 'zubehoer,zubehör,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,stossdaempfer,stoßdämpfer,shock absorbers,stuetzfuesse,stützfüße,supports,aufsatzbordwaende,aufsatzbordwände,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck,aspöck', discountPercent: 13, enabled: true });
   }
   return Array.from(byId.values());
 }
@@ -308,9 +307,9 @@ function defaultGroupLabel(id) {
 
 function defaultGroupMatch(id) {
   return {
-    anhaenger: 'anhaenger,hochlader,kipper,autotransporter,flatbed',
+    anhaenger: 'anhaenger,anhänger,hochlader,kipper,autotransporter,flatbed',
     ersatzteile: 'ersatzteil,ersatzteile,spare part,spare parts',
-    zubehoer: 'zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck'
+    zubehoer: 'zubehoer,zubehör,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,stossdaempfer,stoßdämpfer,shock absorbers,stuetzfuesse,stützfüße,supports,aufsatzbordwaende,aufsatzbordwände,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck,aspöck'
   }[id] || id;
 }
 
@@ -319,10 +318,7 @@ function slugifyGroupId(value) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/Ã¤/g, 'a')
-    .replace(/Ã¶/g, 'o')
-    .replace(/Ã¼/g, 'u')
-    .replace(/ÃŸ/g, 'ss')
+    .replace(/ß/g, 'ss')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
 }
@@ -466,13 +462,6 @@ async function refreshSetupStatus() {
         <strong>${escapeHtml(check.label)}</strong>
         <small>${escapeHtml(check.detail)}</small>
       </div>
-    </div>
-  `).join('');
-  processStripEl.innerHTML = setup.process.map((item) => `
-    <div class="process-step">
-      <b>${escapeHtml(item.step)}</b>
-      <strong>${escapeHtml(item.title)}</strong>
-      <small>${escapeHtml(item.text)}</small>
     </div>
   `).join('');
 }

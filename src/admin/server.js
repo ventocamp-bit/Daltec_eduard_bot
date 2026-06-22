@@ -864,7 +864,7 @@ function monitoringAlerts(metrics) {
   if (metrics.failedCount > 0) alerts.push({ level: 'error', code: 'failed_runs', message: `${metrics.failedCount} fehlgeschlagene Runs in ${metrics.windowHours}h.` });
   if (metrics.ownerMailFailureCount > 0) alerts.push({ level: 'error', code: 'owner_mail_failed', message: `${metrics.ownerMailFailureCount} Owner-Mail-Fehler.` });
   if (metrics.inventory.stale) alerts.push({ level: 'warning', code: 'inventory_stale', message: 'Lager-/Preis-CSV ist veraltet oder fehlt.' });
-  if (metrics.inventory.tooSmall) alerts.push({ level: 'error', code: 'inventory_too_small', message: `Lager-/Preis-CSV hat nur ${metrics.inventory.itemCount} Position(en). Minimum fuer Proof: ${metrics.inventory.minItemCount}.` });
+  if (metrics.inventory.tooSmall) alerts.push({ level: 'error', code: 'inventory_too_small', message: `Lager-/Preis-CSV hat nur ${metrics.inventory.itemCount} Position(en). Minimum für Proof: ${metrics.inventory.minItemCount}.` });
   if (metrics.runCount >= 5 && metrics.failedRate > 0.1) alerts.push({ level: 'error', code: 'failed_rate_high', message: `Failed Rate ${(metrics.failedRate * 100).toFixed(0)}%.` });
   if (metrics.runCount >= 5 && metrics.needsReviewRate > 0.4) alerts.push({ level: 'warning', code: 'needs_review_rate_high', message: `Needs-Review Rate ${(metrics.needsReviewRate * 100).toFixed(0)}%.` });
   if (metrics.suspectedDuplicateRunCount > 0) alerts.push({ level: 'error', code: 'suspected_duplicate_runs', message: `${metrics.suspectedDuplicateRunCount} verdächtige doppelte Verarbeitung(en) im Flight Recorder.` });
@@ -949,7 +949,7 @@ async function buildSaasReadinessSnapshot(context) {
     blockers.push({
       code: 'storage_not_production_db',
       severity: 'p0',
-      message: 'Flight Recorder nutzt noch lokale JSONL-Dateien. Fuer echtes Multi-Haendler-SaaS braucht es Postgres/ACID/Backups.'
+      message: 'Flight Recorder nutzt noch lokale JSONL-Dateien. Für echtes Multi-Händler-SaaS braucht es Postgres/ACID/Backups.'
     });
   }
   if (!monitoring.metrics.mailConnected) {
@@ -962,14 +962,14 @@ async function buildSaasReadinessSnapshot(context) {
     blockers.push({
       code: 'proof_mail_count_low',
       severity: 'p0',
-      message: `${processedRuns.length}/100 echte verarbeitete Runs im Flight Recorder. Ziel fuer Verkauf: 100.`
+      message: `${processedRuns.length}/100 echte verarbeitete Runs im Flight Recorder. Ziel für Verkauf: 100.`
     });
   }
   if (feedback.length < 20) {
     blockers.push({
       code: 'owner_feedback_low',
       severity: 'p0',
-      message: `${feedback.length}/20 Owner-Feedbacks erfasst. Ohne Feedback ist Draft-Qualitaet nicht bewiesen.`
+      message: `${feedback.length}/20 Owner-Feedbacks erfasst. Ohne Feedback ist Draft-Qualität nicht bewiesen.`
     });
   }
   if (safeDraftAcceptanceRate !== null && safeDraftAcceptanceRate < 0.8) {
@@ -1037,7 +1037,7 @@ async function buildSaasReadinessSnapshot(context) {
     runtime,
     blockers,
     warnings,
-    nextAction: blockers[0]?.message || warnings[0]?.message || 'Pilot kann verkauft werden. Weiter nur ueber Feedback und Monitoring skalieren.'
+    nextAction: blockers[0]?.message || warnings[0]?.message || 'Pilot kann verkauft werden. Weiter nur über Feedback und Monitoring skalieren.'
   };
 }
 
@@ -1119,7 +1119,7 @@ function reviewDigestHtml(items, { config, context, auth }) {
         <div style="max-width:880px;margin:0 auto;background:#ffffff;border:1px solid #e1e5eb;border-radius:8px;overflow:hidden;">
           <div style="padding:14px 16px;border-bottom:1px solid #e1e5eb;">
             <h1 style="font-size:20px;line-height:1.2;margin:0 0 4px;">Eduard Review Queue</h1>
-            <p style="margin:0;color:#667085;font-size:13px;">Bitte jeden Entwurf bewerten. Das ist die Messung fuer Safe Draft Acceptance.</p>
+            <p style="margin:0;color:#667085;font-size:13px;">Bitte jeden Entwurf bewerten. Das ist die Messung für Safe Draft Acceptance.</p>
           </div>
           <div style="display:grid;gap:10px;padding:12px;">
             ${rows}
@@ -1130,7 +1130,7 @@ function reviewDigestHtml(items, { config, context, auth }) {
 }
 
 function reviewDigestRow(item, index, { baseUrl, context, auth }) {
-  const reason = item.errorMessage || item.match?.matched || item.subject || 'Entwurf pruefen';
+  const reason = item.errorMessage || item.match?.matched || item.subject || 'Entwurf prüfen';
   const buttons = [
     ['sendable', 'Sendbar'],
     ['minor_correction', 'Kleine Korrektur'],
@@ -1202,8 +1202,8 @@ function reviewQueueItem(run) {
     },
     warnings: reasonCodes,
     nextAction: isNeedsReview
-      ? 'Pruefen und Feedback setzen'
-      : 'Sendbarkeit bestaetigen'
+      ? 'Prüfen und Feedback setzen'
+      : 'Sendbarkeit bestätigen'
   };
 }
 

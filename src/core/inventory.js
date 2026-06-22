@@ -13,10 +13,7 @@ function cleanString(value) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[ä]/g, 'a')
-    .replace(/[ö]/g, 'o')
-    .replace(/[ü]/g, 'u')
-    .replace(/[ß]/g, 'ss')
+    .replace(/ß/g, 'ss')
     .replace(/[\s\-_]/g, '');
 }
 
@@ -115,18 +112,18 @@ function buildMatchExplanation({
   const warnings = [];
 
   if (skuMatch) {
-    reasons.push({ code: 'sku_match', message: 'Artikelnummer stimmt mit der Lagerzeile ueberein.' });
+    reasons.push({ code: 'sku_match', message: 'Artikelnummer stimmt mit der Lagerzeile überein.' });
   }
   if (!skuMatch && TYP_KOMPATIBEL[anfrageTyp]?.includes(lagerTyp)) {
     reasons.push({ code: 'type_match', message: `Angefragter Typ ${anfrageTyp} passt zu Lager-Typ ${lagerTyp}.` });
   }
   if (sucheLaenge > 0 && lLaenge > 0) {
     const diff = Math.abs(lLaenge - sucheLaenge);
-    if (diff === 0) reasons.push({ code: 'length_exact', message: 'Laenge passt exakt.' });
-    else if (diff <= 100) reasons.push({ code: 'length_close', message: `Laenge weicht um ${diff} mm ab.` });
-    else warnings.push({ code: 'length_mismatch', message: `Laenge weicht um ${diff} mm ab.` });
+    if (diff === 0) reasons.push({ code: 'length_exact', message: 'Länge passt exakt.' });
+    else if (diff <= 100) reasons.push({ code: 'length_close', message: `Länge weicht um ${diff} mm ab.` });
+    else warnings.push({ code: 'length_mismatch', message: `Länge weicht um ${diff} mm ab.` });
   } else {
-    warnings.push({ code: 'length_missing', message: 'Laenge konnte nicht auf beiden Seiten sicher verglichen werden.' });
+    warnings.push({ code: 'length_missing', message: 'Länge konnte nicht auf beiden Seiten sicher verglichen werden.' });
   }
   if (sucheBreite > 0 && lBreite > 0) {
     const diff = Math.abs(lBreite - sucheBreite);
@@ -148,7 +145,7 @@ function buildMatchExplanation({
     warnings.push({ code: 'sku_not_exact', message: 'Artikelnummer ist kein exakter Treffer.' });
   }
   if (matchConfidence(score) === 'low') {
-    warnings.push({ code: 'low_confidence', message: 'Match ist schwach und muss manuell geprueft werden.' });
+    warnings.push({ code: 'low_confidence', message: 'Match ist schwach und muss manuell geprüft werden.' });
   }
 
   return {
@@ -195,7 +192,7 @@ export function matchInventory(input, lagerBestand = [], preisliste = [], settin
       if (!skuMatch && !erlaubteTypen.includes(lagerTyp)) continue;
 
       const masse = parseDimensionsFromName(lagerArtikel['Art.-Bez.']);
-      const lLaenge = Number.parseInt(lagerArtikel['Länge'] || lagerArtikel.Laenge || lagerArtikel['LÃ¤nge'] || '', 10) || masse.laenge || 0;
+      const lLaenge = Number.parseInt(lagerArtikel['Länge'] || lagerArtikel.Laenge || '', 10) || masse.laenge || 0;
       const lBreite = Number.parseInt(lagerArtikel.Breite || '', 10) || masse.breite || 0;
       const lGewicht = Number.parseInt(lagerArtikel.hzGGew || '', 10) || 0;
 

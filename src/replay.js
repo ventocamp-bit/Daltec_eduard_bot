@@ -223,7 +223,7 @@ function buildProofGate(results, options = {}) {
   if (inventoryItemCount < minInventoryItems) {
     blockers.push({
       code: 'inventory_too_small',
-      message: `Lager-/Preis-CSV hat nur ${inventoryItemCount} Position(en). Minimum fuer belastbaren Proof: ${minInventoryItems}.`
+      message: `Lager-/Preis-CSV hat nur ${inventoryItemCount} Position(en). Minimum für belastbaren Proof: ${minInventoryItems}.`
     });
   }
   if (dangerousCount > 0) {
@@ -247,7 +247,7 @@ function buildProofGate(results, options = {}) {
   if (safeDraftCandidateRate < 0.8) {
     blockers.push({
       code: 'safe_draft_candidate_rate_low',
-      message: `Nur ${Math.round(safeDraftCandidateRate * 100)}% sichere Draft-Kandidaten. Ziel fuer DALTEC Proof: mindestens 80% plus Owner-Feedback.`
+      message: `Nur ${Math.round(safeDraftCandidateRate * 100)}% sichere Draft-Kandidaten. Ziel für DALTEC Proof: mindestens 80% plus Owner-Feedback.`
     });
   }
 
@@ -302,7 +302,7 @@ function nextProofAction(blockers, metrics = {}) {
   if (blockers.some((blocker) => blocker.code === 'safe_draft_candidate_rate_low')) {
     return 'Top Needs-Review-Gruende fixen und Owner Feedback einsammeln.';
   }
-  return blockers[0]?.message || 'Owner Feedback fuer Safe Draft Acceptance Rate einsammeln.';
+  return blockers[0]?.message || 'Owner Feedback für Safe Draft Acceptance Rate einsammeln.';
 }
 
 async function inventoryProofSnapshot(context) {

@@ -123,7 +123,7 @@ function reviewDigestHtml(items, { config, context, auth }) {
         <div style="max-width:880px;margin:0 auto;background:#ffffff;border:1px solid #e1e5eb;border-radius:8px;overflow:hidden;">
           <div style="padding:14px 16px;border-bottom:1px solid #e1e5eb;">
             <h1 style="font-size:20px;line-height:1.2;margin:0 0 4px;">Eduard Review Queue</h1>
-            <p style="margin:0;color:#667085;font-size:13px;">Bitte jeden Entwurf bewerten. Das ist die Messung fuer Safe Draft Acceptance.</p>
+            <p style="margin:0;color:#667085;font-size:13px;">Bitte jeden Entwurf bewerten. Das ist die Messung für Safe Draft Acceptance.</p>
           </div>
           <div style="display:grid;gap:10px;padding:12px;">
             ${rows}
@@ -134,7 +134,7 @@ function reviewDigestHtml(items, { config, context, auth }) {
 }
 
 function reviewDigestRow(item, index, { baseUrl, context, auth }) {
-  const reason = item.errorMessage || item.match?.matched || item.subject || 'Entwurf pruefen';
+  const reason = item.errorMessage || item.match?.matched || item.subject || 'Entwurf prüfen';
   const buttons = [
     ['sendable', 'Sendbar'],
     ['minor_correction', 'Kleine Korrektur'],
@@ -193,7 +193,7 @@ function reviewQueueItem(run) {
       stockQty: match.stock_qty ?? null
     },
     warnings: reasonCodes,
-    nextAction: isNeedsReview ? 'Pruefen und Feedback setzen' : 'Sendbarkeit bestaetigen'
+    nextAction: isNeedsReview ? 'Prüfen und Feedback setzen' : 'Sendbarkeit bestätigen'
   };
 }
 

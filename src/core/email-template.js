@@ -3,6 +3,7 @@ import { formatEur } from './format.js';
 function salutation(vorname, nachname) {
   return `Sehr geehrte/r ${vorname || ''} ${nachname || ''}`.replace(/\s+/g, ' ').trim();
 }
+
 function normalizeCalc(calc = {}) {
   return {
     uvpBrutto: calc.gesamt_uvp_brutto || 0,
@@ -33,47 +34,44 @@ function tableHtml(calc, title, isInventory, settings) {
     if (entry.section) {
       return `
         <tr>
-          <td colspan="3" style="padding:10px 8px;border-bottom:1px solid ${colors.borderColor};background:${colors.headerBackground};font-weight:bold;">${entry.section}</td>
+          <td colspan='3' style='padding:10px 8px;border-bottom:1px solid ${colors.borderColor};background:${colors.headerBackground};font-weight:bold;'>${entry.section}</td>
         </tr>`;
     }
     const position = entry.position;
     return `
-    <tr>
-      <td style="padding:8px;border-bottom:1px solid ${colors.borderColor};">${position.produkt_name}</td>
-      <td style="padding:8px;border-bottom:1px solid ${colors.borderColor};text-align:right;">${formatEur(position.uvp_netto * 1.2)}</td>
-      <td style="padding:8px;border-bottom:1px solid ${colors.borderColor};text-align:right;">${formatEur(position.angebot_netto * 1.2)}</td>
-    </tr>`;
+        <tr>
+          <td style='padding:8px;border-bottom:1px solid ${colors.borderColor};'>${position.produkt_name}</td>
+          <td style='padding:8px;border-bottom:1px solid ${colors.borderColor};text-align:right;'>${formatEur(position.uvp_netto * 1.2)}</td>
+          <td style='padding:8px;border-bottom:1px solid ${colors.borderColor};text-align:right;'>${formatEur(position.angebot_netto * 1.2)}</td>
+        </tr>`;
   }).join('');
 
   return `
-    <h3 style="font-family:Arial,sans-serif;text-align:center;color:${colors.textColor};text-transform:uppercase;margin-top:20px;">${title}</h3>
-    <table style="max-width:800px;width:100%;margin:0 auto;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};">
-      <thead>
-        <tr style="background:${colors.headerBackground};">
-          <th style="padding:8px;text-align:left;">Position</th>
-          <th style="padding:8px;text-align:right;">UVP brutto</th>
-          <th style="padding:8px;text-align:right;">Angebot brutto</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-      <tfoot>
-        <tr>
-          <td style="padding:10px;font-weight:bold;">Gesamt${isInventory ? ' ab Lager' : ''}</td>
-          <td style="padding:10px;text-align:right;font-weight:bold;">${formatEur(normalized.uvpBrutto)}</td>
-          <td style="padding:10px;text-align:right;font-weight:bold;color:${colors.accentColor};">${formatEur(normalized.angebotBrutto)}</td>
-        </tr>
-      </tfoot>
-    </table>`;
+      <h3 style='font-family:Arial,sans-serif;text-align:center;color:${colors.textColor};text-transform:uppercase;margin-top:20px;'>${title}</h3>
+      <table style='max-width:800px;width:100%;margin:0 auto;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};'>
+        <thead>
+          <tr style='background:${colors.headerBackground};'>
+            <th style='padding:8px;text-align:left;'>Position</th>
+            <th style='padding:8px;text-align:right;'>UVP brutto</th>
+            <th style='padding:8px;text-align:right;'>Angebot brutto</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        <tfoot>
+          <tr>
+            <td style='padding:10px;font-weight:bold;'>Gesamt${isInventory ? ' ab Lager' : ''}</td>
+            <td style='padding:10px;text-align:right;font-weight:bold;'>${formatEur(normalized.uvpBrutto)}</td>
+            <td style='padding:10px;text-align:right;font-weight:bold;color:${colors.accentColor};'>${formatEur(normalized.angebotBrutto)}</td>
+          </tr>
+        </tfoot>
+      </table>`;
 }
 
 function groupedPositions(positionen, isInventory) {
-  if (isInventory) {
-    return positionen.map((position) => ({ position }));
-  }
+  if (isInventory) return positionen.map((position) => ({ position }));
 
   const trailers = positionen.filter((position) => position.kategorie === 'anhaenger');
   const accessories = positionen.filter((position) => position.kategorie !== 'anhaenger');
-
   if (trailers.length === 0 || accessories.length === 0) {
     return positionen.map((position) => ({ position }));
   }
@@ -114,7 +112,7 @@ function hintsHtml(allItemsText, settings) {
     );
   }
 
-  if ((/kipper|rückwärts|rueckwaerts|ruckwaerts/i.test(allItemsText) || (/hochlader/i.test(allItemsText) && /rampe|auffahrschien/i.test(allItemsText))) && !/heckstütz|heckstuetz|stützfüß|stuetzfuss|kurbelstütz|kurbelstuetz/i.test(allItemsText)) {
+  if ((/kipper|rückwärts|rueckwaerts|ruckwaerts/i.test(allItemsText) || (/hochlader/i.test(allItemsText) && /rampe|auffahrschien/i.test(allItemsText))) && !/heckstütz|heckstuetz|stützfuß|stuetzfuss|kurbelstütz|kurbelstuetz/i.test(allItemsText)) {
     hints += hintParagraph(
       colors,
       'Hinweis Heckstützen:',
@@ -122,12 +120,13 @@ function hintsHtml(allItemsText, settings) {
     );
   }
 
-  return hints ? `<div style="max-width:800px;margin:20px auto;padding:20px;border:1px solid #ccc;background:${colors.hintBackground};">${hints}</div>` : '';
+  return hints ? `<div style='max-width:800px;margin:20px auto;padding:20px;border:1px solid #ccc;background:${colors.hintBackground};'>${hints}</div>` : '';
 }
 
 function hintParagraph(colors, title, text) {
-  return `<p style="font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};margin-bottom:15px;line-height:1.5;"><strong>${title}</strong> ${text}</p>`;
+  return `<p style='font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};margin-bottom:15px;line-height:1.5;'><strong>${title}</strong> ${text}</p>`;
 }
+
 function getSignature(settings = {}) {
   return {
     greeting: 'Beste Grüße',
@@ -172,18 +171,18 @@ export function buildOfferEmail(context, settings = {}) {
   if (istExaktMatch) {
     introText = `vielen Dank für Ihre Anfrage zu einem Eduard Anhänger. <strong>Gute Nachrichten:</strong> Das von Ihnen konfigurierte Fahrzeug steht sofort auf Lager in ${locationName} zur Verfügung. Sie können es sich jederzeit ansehen und sofort mitnehmen!`;
     tables = `
-      <h3 style="font-family:Arial,sans-serif;text-align:center;color:${colors.textColor};text-transform:uppercase;margin-top:10px;">Sofort ab Lager verfügbar</h3>
-      <p style="font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};text-align:center;max-width:800px;margin:0 auto 15px auto;">Dieses Fahrzeug steht bereits auf unserem Hof in ${locationName} inklusive COC &amp; Typisierung:<br><strong>Für Zubehör zum lagernden Basis-Fahrzeug kontaktieren Sie uns bitte per E-Mail oder telefonisch.</strong></p>
+      <h3 style='font-family:Arial,sans-serif;text-align:center;color:${colors.textColor};text-transform:uppercase;margin-top:10px;'>Sofort ab Lager verfügbar</h3>
+      <p style='font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};text-align:center;max-width:800px;margin:0 auto 15px auto;'>Dieses Fahrzeug steht bereits auf unserem Hof in ${locationName} inklusive COC &amp; Typisierung:<br><strong>Für Zubehör zum lagernden Basis-Fahrzeug kontaktieren Sie uns bitte per E-Mail oder telefonisch.</strong></p>
       ${tableHtml(lagerCalc, lagerName, true, settings)}`;
   } else if (hatMatch) {
-    introText = `vielen Dank für Ihre Anfrage zu einem Eduard Anhänger. Wir können Ihnen das gewünschte Fahrzeug zu einem Gesamtpreis von <strong>${formatEur(norm.angebotBrutto)}</strong> statt ${formatEur(norm.uvpBrutto)} anbieten (Rabatt: <strong style="color:${colors.accentColor};">${formatEur(norm.rabattBrutto)}</strong>, Lieferzeit ca. ${defaultDeliveryTime}). Zusätzlich haben wir ein sehr ähnliches Modell sofort auf Lager. Sie können dieses jederzeit besichtigen und sofort mitnehmen!`;
+    introText = `vielen Dank für Ihre Anfrage zu einem Eduard Anhänger. Wir können Ihnen das gewünschte Fahrzeug zu einem Gesamtpreis von <strong>${formatEur(norm.angebotBrutto)}</strong> statt ${formatEur(norm.uvpBrutto)} anbieten (Rabatt: <strong style='color:${colors.accentColor};'>${formatEur(norm.rabattBrutto)}</strong>, Lieferzeit ca. ${defaultDeliveryTime}). Zusätzlich haben wir ein sehr ähnliches Modell sofort auf Lager. Sie können dieses jederzeit besichtigen und sofort mitnehmen!`;
     tables = `
       ${tableHtml(anfrageCalc, `Ihre Wunsch-Konfiguration (Lieferzeit ca. ${defaultDeliveryTime})`, false, settings)}
-      <h3 style="font-family:Arial,sans-serif;text-align:center;color:${colors.textColor};text-transform:uppercase;margin-top:40px;">Sofort ab Lager verfügbar</h3>
-      <p style="font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};text-align:center;max-width:800px;margin:0 auto 15px auto;">Alternativ steht dieses sehr ähnliche Fahrzeug sofort auf unserem Hof in ${locationName} bereit inklusive COC &amp; Typisierung:<br><strong>Für Zubehör zum lagernden Basis-Fahrzeug kontaktieren Sie uns bitte per E-Mail oder telefonisch.</strong></p>
+      <h3 style='font-family:Arial,sans-serif;text-align:center;color:${colors.textColor};text-transform:uppercase;margin-top:40px;'>Sofort ab Lager verfügbar</h3>
+      <p style='font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};text-align:center;max-width:800px;margin:0 auto 15px auto;'>Alternativ steht dieses sehr ähnliche Fahrzeug sofort auf unserem Hof in ${locationName} bereit inklusive COC &amp; Typisierung:<br><strong>Für Zubehör zum lagernden Basis-Fahrzeug kontaktieren Sie uns bitte per E-Mail oder telefonisch.</strong></p>
       ${tableHtml(lagerCalc, lagerName, true, settings)}`;
   } else {
-    introText = `vielen Dank für Ihre Anfrage zu einem Eduard Anhänger. Wir können Ihnen das gewünschte Fahrzeug zu einem Gesamtpreis von <strong>${formatEur(norm.angebotBrutto)}</strong> statt ${formatEur(norm.uvpBrutto)} anbieten (Rabatt: <strong style="color:${colors.accentColor};">${formatEur(norm.rabattBrutto)}</strong>, Lieferzeit ca. ${defaultDeliveryTime}).`;
+    introText = `vielen Dank für Ihre Anfrage zu einem Eduard Anhänger. Wir können Ihnen das gewünschte Fahrzeug zu einem Gesamtpreis von <strong>${formatEur(norm.angebotBrutto)}</strong> statt ${formatEur(norm.uvpBrutto)} anbieten (Rabatt: <strong style='color:${colors.accentColor};'>${formatEur(norm.rabattBrutto)}</strong>, Lieferzeit ca. ${defaultDeliveryTime}).`;
     tables = tableHtml(anfrageCalc, `Ihre Wunsch-Konfiguration (Lieferzeit ca. ${defaultDeliveryTime})`, false, settings);
   }
 
@@ -191,21 +190,21 @@ export function buildOfferEmail(context, settings = {}) {
   const kundenName = `${context.kunde_vorname || ''} ${context.kunde_nachname || ''}`.trim();
 
   const html = `
-    <div style="width:100%;text-align:center;background-color:#ffffff;padding:20px 0;">
-      <div style="max-width:800px;margin:0 auto 20px auto;text-align:left;font-family:Arial,sans-serif;font-size:13px;color:#444;border:1px solid #ccc;background-color:#f4f4f4;padding:10px;border-radius:4px;">
+    <div style='width:100%;text-align:center;background-color:#ffffff;padding:20px 0;'>
+      <div style='max-width:800px;margin:0 auto 20px auto;text-align:left;font-family:Arial,sans-serif;font-size:13px;color:#444;border:1px solid #ccc;background-color:#f4f4f4;padding:10px;border-radius:4px;'>
         <strong>Kunden E-Mail kopieren:</strong><br>
-        <span style="user-select:all;-webkit-user-select:all;display:inline-block;background:#fff;padding:4px 8px;margin-top:5px;border:1px solid #bbb;border-radius:3px;cursor:pointer;color:#000;font-weight:bold;">${kundenEmail}</span>
+        <span style='user-select:all;-webkit-user-select:all;display:inline-block;background:#fff;padding:4px 8px;margin-top:5px;border:1px solid #bbb;border-radius:3px;cursor:pointer;color:#000;font-weight:bold;'>${kundenEmail}</span>
       </div>
-      <p style="font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};max-width:800px;margin:0 auto 25px auto;text-align:left;line-height:1.5;">
+      <p style='font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};max-width:800px;margin:0 auto 25px auto;text-align:left;line-height:1.5;'>
         ${salutation(context.kunde_vorname, context.kunde_nachname)},<br><br>
         ${introText} ${copyQuestion}
       </p>
       ${tables}
       ${hintsHtml(allItemsText, settings)}
-      <p style="font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};max-width:800px;margin:40px auto 0 auto;text-align:left;">
+      <p style='font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};max-width:800px;margin:40px auto 0 auto;text-align:left;'>
         ${signature.greeting}<br><br>
         <strong>${signature.name}</strong><br>
-        <span style="font-size:12px;color:#666;line-height:1.6;">
+        <span style='font-size:12px;color:#666;line-height:1.6;'>
           ${signature.company}<br>
           ${signature.address1}<br>
           ${signature.address2}<br>

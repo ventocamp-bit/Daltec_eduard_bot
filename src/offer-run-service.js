@@ -46,7 +46,7 @@ export async function processOfferRun(runId, context = {}) {
     });
 
     if (!result.inquiry?.line_items?.length) {
-      await markRunFailure(runId, 'needs_review', 'no_valid_items', 'Keine gÃ¼ltigen Artikelpositionen gefunden.', context);
+      await markRunFailure(runId, 'needs_review', 'no_valid_items', 'Keine gültigen Artikelpositionen gefunden.', context);
       return loadOfferRun(runId, context);
     }
 
@@ -84,7 +84,7 @@ export async function processOfferRun(runId, context = {}) {
           raw_price: unsupportedCurrency.raw_price
         }
       }, context);
-      await markRunFailure(runId, 'needs_review', 'unsupported_currency', `Preis in ${unsupportedCurrency.unsupported_currency} erkannt. Bitte manuell pruefen.`, context);
+      await markRunFailure(runId, 'needs_review', 'unsupported_currency', `Preis in ${unsupportedCurrency.unsupported_currency} erkannt. Bitte manuell prüfen.`, context);
       return loadOfferRun(runId, context);
     }
 
@@ -99,7 +99,7 @@ export async function processOfferRun(runId, context = {}) {
           articleNumber: skuNotFound.artikelnummer || null
         }
       }, context);
-      await markRunFailure(runId, 'needs_review', 'sku_not_found', 'Eduard SKU NOT FOUND. Bitte manuell bei Eduard pruefen.', context);
+      await markRunFailure(runId, 'needs_review', 'sku_not_found', 'Eduard SKU NOT FOUND. Bitte manuell bei Eduard prüfen.', context);
       return loadOfferRun(runId, context);
     }
 
@@ -140,10 +140,10 @@ export async function processOfferRun(runId, context = {}) {
       (hasPriceReviewWarning ? pricingWarnings[0].code : null) ||
       (weakInventoryMatch ? 'weak_inventory_match' : (finalStatus === 'needs_review' ? 'no_inventory_match' : null));
     const errorMessage = inventoryWarning
-      ? 'Lager-/Preis-CSV ist veraltet. Lager-Match bitte manuell pruefen.'
+      ? 'Lager-/Preis-CSV ist veraltet. Lager-Match bitte manuell prüfen.'
       : hasPriceReviewWarning
         ? pricingWarnings[0].message
-        : (weakInventoryMatch ? 'Lager-Match ist schwach. Bitte manuell pruefen.' : (finalStatus === 'needs_review' ? 'Kein sicherer Lager-Match gefunden.' : null));
+        : (weakInventoryMatch ? 'Lager-Match ist schwach. Bitte manuell prüfen.' : (finalStatus === 'needs_review' ? 'Kein sicherer Lager-Match gefunden.' : null));
     await updateOfferRun(runId, {
       status: inventoryMeta.stale ? 'needs_review' : finalStatus,
       completed_at: new Date().toISOString(),

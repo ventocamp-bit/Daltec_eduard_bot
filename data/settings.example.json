@@ -19,7 +19,7 @@
       {
         "id": "anhaenger",
         "label": "Anhänger",
-        "match": "anhaenger,hochlader,kipper,dreiseiten,rueckwaerts,autotransporter,multitransporter,fahrzeugtransporter,flatbed,cargo",
+        "match": "anhaenger,anhänger,hochlader,kipper,dreiseiten,rueckwaerts,rückwärts,autotransporter,multitransporter,fahrzeugtransporter,flatbed,cargo",
         "enabled": true
       },
       {
@@ -31,7 +31,7 @@
       {
         "id": "zubehoer",
         "label": "Zubehör",
-        "match": "zubehoer,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,aluminium ramps,aluminum ramps,stossdaempfer,shock absorbers,stuetzfuesse,supports,aufsatzbordwaende,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck",
+        "match": "zubehoer,zubehör,plane,spriegel,coc,typisierung,service,netzhaken,auffahrrampe,rampe,rampen,aluminium ramps,aluminum ramps,stossdaempfer,stoßdämpfer,shock absorbers,stuetzfuesse,stützfüße,supports,aufsatzbordwaende,aufsatzbordwände,bodenunterstuetzung,h-gestelle,led,beleuchtung,lighting,aspoeck,aspöck",
         "enabled": true
       }
     ],
@@ -62,16 +62,16 @@
   "mail": {
     "to": "michael@daltec.at",
     "subject": "Daltec Eduard Angebot",
-    "copyQuestion": "Bei Fragen stehe ich Ihnen jederzeit zur Verfuegung.",
+    "copyQuestion": "Bei Fragen stehe ich Ihnen jederzeit zur Verfügung.",
     "deliveryMode": "owner_review"
   },
   "signature": {
-    "greeting": "Beste Gruesse",
+    "greeting": "Beste Grüße",
     "name": "Lukas Mitter, MSc",
     "company": "Daltec GmbH",
     "address1": "Esaromstr. 5 (Ecke Bahnhofplatz)",
-    "address2": "2111 Harmannsdorf - Rueckersdorf",
-    "phone": "Buero: +43 676 777 18 00",
+    "address2": "2111 Harmannsdorf - Rückersdorf",
+    "phone": "Büro: +43 676 777 18 00",
     "email": "Email: lukas@daltec.at",
     "website": "Website: Daltec.at"
   },

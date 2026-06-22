@@ -6,7 +6,7 @@ const HEADER_ALIASES = {
   name: ['Art.-Bez.', 'Artikelbezeichnung', 'Bezeichnung', 'Typ'],
   stock: ['Lagermenge', 'verf. Lagermenge', 'Lager'],
   stockValue: ['Lagerwert', 'EK', 'Einkaufspreis', 'Bruttopreis (Konfigurator)'],
-  length: ['Länge', 'LÃ¤nge', 'Laenge', 'LÃƒÂ¤nge', 'LÃƒÆ’Ã‚Â¤nge'],
+  length: ['Länge', 'Laenge'],
   width: ['Breite'],
   weight: ['hzGGew', 'hzG Gew', 'Gewicht', 'KG'],
   serial: ['Ser.-Nr. (int)', 'Ser.-Nr. (ext)', 'Seriennummer', 'FIN']
@@ -26,7 +26,7 @@ export function validateInventoryCsv(content) {
   if (rows.length === 0) {
     errors.push({
       code: 'csv_empty',
-      message: 'Die CSV enthÃ¤lt keine Datenzeilen.'
+      message: 'Die CSV enthält keine Datenzeilen.'
     });
   }
 
@@ -39,8 +39,8 @@ export function validateInventoryCsv(content) {
     }
   }
 
-  if (!resolved.length) warnings.push({ code: 'missing_length', message: 'LÃ¤ngen-Spalte fehlt. Matching fÃ¤llt auf den Produktnamen zurÃ¼ck.' });
-  if (!resolved.width) warnings.push({ code: 'missing_width', message: 'Breiten-Spalte fehlt. Matching fÃ¤llt auf den Produktnamen zurÃ¼ck.' });
+  if (!resolved.length) warnings.push({ code: 'missing_length', message: 'Längen-Spalte fehlt. Matching fällt auf den Produktnamen zurück.' });
+  if (!resolved.width) warnings.push({ code: 'missing_width', message: 'Breiten-Spalte fehlt. Matching fällt auf den Produktnamen zurück.' });
   if (!resolved.weight) warnings.push({ code: 'missing_weight', message: 'Gewichts-Spalte fehlt. Matching wird unsicherer.' });
 
   const seenVehicle = new Map();
@@ -74,15 +74,15 @@ export function validateInventoryCsv(content) {
 
     const stockNumber = parseInteger(stock);
     if (stockNumber === null || stockNumber < 0) {
-      errors.push({ code: 'invalid_stock', row: rowNumber, message: `Zeile ${rowNumber}: Lagermenge ist keine gÃ¼ltige Zahl.` });
+      errors.push({ code: 'invalid_stock', row: rowNumber, message: `Zeile ${rowNumber}: Lagermenge ist keine gültige Zahl.` });
     }
 
     const priceNumber = parseEuroNumber(stockValue);
     if (priceNumber <= 0) {
-      errors.push({ code: 'invalid_stock_value', row: rowNumber, message: `Zeile ${rowNumber}: Lagerwert/Preis ist leer oder ungÃ¼ltig.` });
+      errors.push({ code: 'invalid_stock_value', row: rowNumber, message: `Zeile ${rowNumber}: Lagerwert/Preis ist leer oder ungültig.` });
     }
 
-    validateOptionalPositiveInteger(row, resolved.length, 'invalid_length', 'LÃ¤nge', rowNumber, warnings);
+    validateOptionalPositiveInteger(row, resolved.length, 'invalid_length', 'Länge', rowNumber, warnings);
     validateOptionalPositiveInteger(row, resolved.width, 'invalid_width', 'Breite', rowNumber, warnings);
     validateOptionalPositiveInteger(row, resolved.weight, 'invalid_weight', 'hzGGew/Gewicht', rowNumber, warnings);
   });
@@ -99,6 +99,7 @@ export function validateInventoryCsv(content) {
     }
   };
 }
+
 function findHeader(headers, aliases) {
   const normalizedHeaders = headers.map((header) => ({ header, key: normalizeHeader(header) }));
   for (const alias of aliases) {
@@ -115,10 +116,6 @@ function normalizeHeader(value) {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[ÃƒÂ¤]/g, 'a')
-    .replace(/[ÃƒÂ¶]/g, 'o')
-    .replace(/[ÃƒÂ¼]/g, 'u')
-    .replace(/[ÃƒÅ¸]/g, 'ss')
     .replace(/[^a-z0-9]+/g, '');
 }
 

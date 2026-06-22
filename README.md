@@ -1,6 +1,6 @@
 # Eduard Angebote
 
-Angebots-Automation fuer Eduard-Anfragen.
+Angebots-Automation für Eduard-Anfragen.
 
 ## Was die App macht
 
@@ -55,7 +55,7 @@ https://angebote.daltec.at/api/oauth/microsoft/callback
 
 ## Daten
 
-Die App nutzt eine CSV fuer Lager, Preise und Upsell:
+Die App nutzt eine CSV für Lager, Preise und Upsell:
 
 ```text
 data/lager.csv
@@ -91,7 +91,7 @@ npm test
 
 Die App unterscheidet hart zwischen DALTEC-Proof und verkaufbarem SaaS. Die Admin-UI zeigt unter `SaaS Readiness`, was noch blockiert.
 
-Pflicht fuer externen SaaS-Betrieb:
+Pflicht für externen SaaS-Betrieb:
 
 ```text
 Postgres aktiv
@@ -100,7 +100,7 @@ ADMIN_PASSWORD_HASH statt Plain-Passwort
 aktuelles Postgres Backup
 Mailzugang verbunden
 keine automatische Kundenmail
-Google OAuth verifiziert oder Pilot ueber zentrale Weiterleitung
+Google OAuth verifiziert oder Pilot über zentrale Weiterleitung
 100 echte Proof-Runs
 20 Owner-Feedbacks
 Safe Draft Acceptance >= 80 %
@@ -120,7 +120,7 @@ Exportierte Eduard-Mails als JSON, JSONL oder Ordner mit JSON/JSONL-Dateien repl
 npm run replay -- --file .\data\replay-mails --tenant daltec-local
 ```
 
-Der Replay verschickt keine Owner-Mail. Er erzeugt Runs im Flight Recorder und reportet Status, Duplikate, Review-Gruende, Snapshots und gefaehrliche Faelle. Fuer den DALTEC-Proof zuerst 20 echte alte Mails replayen, danach die haeufigsten Fehlerursachen fixen.
+Der Replay verschickt keine Owner-Mail. Er erzeugt Runs im Flight Recorder und reportet Status, Duplikate, Review-Gründe, Snapshots und gefährliche Fälle. Für den DALTEC-Proof zuerst 20 echte alte Mails replayen, danach die häufigsten Fehlerursachen fixen.
 
 Gmail-Fixtures read-only exportieren, ohne Labels oder Read-Status zu aendern:
 
@@ -129,7 +129,7 @@ npm run export:gmail -- --limit 20 --out .\data\replay-exports\daltec-20.json
 npm run replay -- --file .\data\replay-exports\daltec-20.json --tenant daltec-local
 ```
 
-Fuer einen sauberen SaaS-Proof ohne Live-Metriken zu verschmutzen, einen isolierten Proof-Tenant mit echter DALTEC-Konfiguration und Lagerdaten seed'en:
+Für einen sauberen SaaS-Proof ohne Live-Metriken zu verschmutzen, einen isolierten Proof-Tenant mit echter DALTEC-Konfiguration und Lagerdaten seed'en:
 
 ```powershell
 npm run replay -- --file .\data\replay-exports\daltec-20.json --tenant daltec-proof-20 --source-tenant daltec-local --provider replay_test
