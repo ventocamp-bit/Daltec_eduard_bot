@@ -58,6 +58,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config();
 const port = Number(process.env.ADMIN_PORT || 3030);
 
+export function getProofTargetRuns(env = process.env) {
+  const parsed = Number.parseInt(env.PROOF_TARGET_RUNS || '100', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+}
+
 export function createAdminApp(options = {}) {
   const app = express();
   const auth = options.auth || authConfig();
@@ -981,6 +986,7 @@ async function buildSaasReadinessSnapshot(context) {
   const settings = await loadSettings(context);
   const mailStatus = await getMailConnectionStatus(config, context);
   const runtime = await buildRuntimeReadiness({ config, settings, mailStatus });
+  const proofTargetRuns = getProofTargetRuns();
   const productionRuns = allRuns.filter((run) => run && !isMonitoringNoise(run, config, settings) && !isArchivedProofRun(run));
   const processedRuns = productionRuns.filter((run) => !['received', 'parsing', 'parsed', 'matching', 'pricing', 'drafting'].includes(run.status));
   const duplicateEvents = productionRuns.flatMap((run) => run.events || []).filter((event) => event.event_type === 'email_deduplicated');
@@ -1006,11 +1012,11 @@ async function buildSaasReadinessSnapshot(context) {
   if (!monitoring.metrics.inventory.exists || monitoring.metrics.inventory.stale || monitoring.metrics.inventory.tooSmall) {
     blockers.push({ code: 'inventory_not_safe', severity: 'p0', message: 'Lager-/Preisquelle ist nicht frisch oder nicht ausreichend gross.' });
   }
-  if (processedRuns.length < 100) {
+  if (processedRuns.length < proofTargetRuns) {
     blockers.push({
       code: 'proof_mail_count_low',
       severity: 'p0',
-      message: `${processedRuns.length}/100 echte verarbeitete Runs im Flight Recorder. Ziel für Verkauf: 100.`
+      message: `${processedRuns.length}/${proofTargetRuns} echte verarbeitete Runs im Flight Recorder. Ziel für Verkauf: ${proofTargetRuns}.`
     });
   }
   if (feedback.length < 20) {
@@ -1075,7 +1081,7 @@ async function buildSaasReadinessSnapshot(context) {
     metrics: {
       productionRuns: productionRuns.length,
       processedRuns: processedRuns.length,
-      proofTargetRuns: 100,
+      proofTargetRuns,
       suspectedDuplicateRunCount,
       ownerFeedbackCount: feedback.length,
       ownerFeedbackTarget: 20,

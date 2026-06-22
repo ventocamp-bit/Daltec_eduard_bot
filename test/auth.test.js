@@ -3,7 +3,7 @@ import http from 'node:http';
 import test from 'node:test';
 import { createPasswordHash, verifyPassword } from '../src/auth.js';
 import { createAdminApp } from '../src/admin/server.js';
-import { findSuspectedDuplicateGroups, isArchivedProofRun } from '../src/admin/server.js';
+import { findSuspectedDuplicateGroups, getProofTargetRuns, isArchivedProofRun } from '../src/admin/server.js';
 import { createFeedbackToken } from '../src/feedback-token.js';
 import { inspectRuntimeReadiness } from '../src/production-readiness.js';
 
@@ -86,6 +86,11 @@ test('readiness archives ignored proof runs', () => {
   assert.equal(isArchivedProofRun({ status: 'ignored' }), true);
   assert.equal(isArchivedProofRun({ status: 'completed' }), false);
   assert.equal(isArchivedProofRun({ status: 'sent_to_owner' }), false);
+});
+
+test('readiness proof target can be configured by environment', () => {
+  assert.equal(getProofTargetRuns({ PROOF_TARGET_RUNS: '62' }), 62);
+  assert.equal(getProofTargetRuns({}), 100);
 });
 
 test('admin API requires login session', async () => {
