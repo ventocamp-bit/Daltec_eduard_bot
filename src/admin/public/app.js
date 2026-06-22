@@ -232,10 +232,8 @@ function readForm() {
 function renderProductGroups(pricing = {}) {
   const groups = normalizeProductGroups(pricing);
   productGroupsEl.innerHTML = `
-    <div class="rule-row rule-row-head">
+    <div class="rule-row product-group-row rule-row-head">
       <span>Name</span>
-      <span>Schlüssel</span>
-      <span>Match-Wörter</span>
       <span>Rabatt %</span>
       <span></span>
     </div>
@@ -278,10 +276,10 @@ function normalizeProductGroups(pricing = {}) {
 
 function productGroupRow(group = {}) {
   return `
-    <div class="rule-row" data-product-group-row>
+    <div class="rule-row product-group-row" data-product-group-row>
       <input data-group-field="label" type="text" value="${escapeHtml(group.label || '')}" placeholder="z.B. Ersatzteile">
-      <input data-group-field="id" type="text" value="${escapeHtml(group.id || '')}" placeholder="ersatzteile">
-      <input data-group-field="match" type="text" value="${escapeHtml(group.match || '')}" placeholder="ersatzteil,schlauch,kupplung">
+      <input data-group-field="id" type="hidden" value="${escapeHtml(group.id || '')}">
+      <input data-group-field="match" type="hidden" value="${escapeHtml(group.match || '')}">
       <input data-group-field="discountPercent" type="number" min="0" max="100" step="1" value="${Number(group.discountPercent ?? 0)}">
       <button type="button" class="icon-button" data-remove-product-group title="Gruppe entfernen">x</button>
     </div>
@@ -352,10 +350,9 @@ function removeProductGroup(event) {
 function renderPriceRules(rules = []) {
   const safeRules = Array.isArray(rules) ? rules : [];
   priceRulesEl.innerHTML = `
-    <div class="rule-row rule-row-head">
+    <div class="rule-row price-rule-row rule-row-head">
       <span>Sorte / Produkt</span>
       <span>Kategorie</span>
-      <span>Basis</span>
       <span>%</span>
       <span></span>
     </div>
@@ -370,7 +367,7 @@ function priceRuleRow(rule = {}) {
   const matchOptions = ['', 'Hochlader', 'Rückwärtskipper', 'Dreiseitenkipper', 'Autotransporter', 'Plane', 'Aufsatzbordwand', 'Laubgitter'];
   const selectedMatch = rule.match || '';
   return `
-    <div class="rule-row" data-rule-row>
+    <div class="rule-row price-rule-row" data-rule-row>
       <select data-rule-field="match">
         ${matchOptions.map((value) => option(value, value || 'Alle', selectedMatch)).join('')}
         ${selectedMatch && !matchOptions.includes(selectedMatch) ? option(selectedMatch, selectedMatch, selectedMatch) : ''}
@@ -381,10 +378,7 @@ function priceRuleRow(rule = {}) {
         ${option('anhaenger', 'Anhänger', category)}
         ${option('zubehoer', 'Zubehör', category)}
       </select>
-      <select data-rule-field="source">
-        ${option('uvp_discount', 'UVP Rabatt', source)}
-        ${option('ek_markup', 'EK/Lagerwert Aufschlag', source)}
-      </select>
+      <input data-rule-field="source" type="hidden" value="${escapeHtml(source || 'uvp_discount')}">
       <input data-rule-field="percent" type="number" min="0" max="300" step="1" value="${Number(rule.percent ?? 0)}">
       <button type="button" class="icon-button" data-remove-rule title="Regel entfernen">×</button>
     </div>

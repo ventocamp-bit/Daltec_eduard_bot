@@ -519,6 +519,14 @@ select {
   padding: 6px;
 }
 
+.product-group-row {
+  grid-template-columns: minmax(160px, 1fr) 80px 32px;
+}
+
+.price-rule-row {
+  grid-template-columns: minmax(150px, 1fr) minmax(110px, 0.8fr) 72px 32px;
+}
+
 .rule-row + .rule-row {
   border-top: 1px solid #eef1f5;
 }
