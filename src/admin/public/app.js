@@ -11,6 +11,8 @@ const offerListEl = document.querySelector('#offer-list');
 const offerCountEl = document.querySelector('#offer-count');
 const runListEl = document.querySelector('#run-list');
 const runCountEl = document.querySelector('#run-count');
+const inventoryImportListEl = document.querySelector('#inventory-import-list');
+const inventoryImportCountEl = document.querySelector('#inventory-import-count');
 const runDetailEl = document.querySelector('#run-detail');
 const runDetailBodyEl = document.querySelector('#run-detail-body');
 const runDetailCloseEl = document.querySelector('#run-detail-close');
@@ -146,6 +148,7 @@ async function load() {
   await refreshReviewQueue();
   await refreshMailStatus();
   await refreshDataStatus();
+  await refreshInventoryImports();
   await refreshOffers();
   await refreshRuns();
   await preview();
@@ -777,8 +780,34 @@ async function refreshDataStatus() {
   const status = await request('/api/data-status');
   dataStatusEl.textContent = [
     `Lager-/Preisdaten: ${status.lagerCsvExists ? 'vorhanden' : 'nicht vorhanden'}`,
-    status.usingLocalCsv ? 'bereit' : 'bitte CSV hochladen'
+    status.usingLocalCsv ? 'bereit' : 'bitte CSV hochladen',
+    status.latestInventoryImport ? `letzter Import: ${status.latestInventoryImport.status}` : 'kein Mail-Import'
   ].join(' | ');
+}
+
+async function refreshInventoryImports() {
+  if (!inventoryImportListEl) return;
+  const imports = await request('/api/inventory-imports');
+  inventoryImportCountEl.textContent = String(imports.length);
+  inventoryImportListEl.innerHTML = imports.length
+    ? imports.slice(0, 8).map((item) => {
+      const error = item.errors?.[0]?.message || '';
+      const detail = [
+        item.source?.filename || item.source?.subject || 'Lagerimport',
+        `${item.rowCount || 0} Zeilen`,
+        error
+      ].filter(Boolean).join(' | ');
+      return `
+        <div class="offer-item">
+          <div class="offer-main">
+            <strong>${escapeHtml(item.status === 'success' ? 'Import OK' : 'Import Fehler')}</strong>
+            <small>${escapeHtml(detail)}</small>
+          </div>
+          <span class="run-status ${item.status === 'success' ? 'completed' : 'failed_terminal'}">${escapeHtml(item.status)}</span>
+        </div>
+      `;
+    }).join('')
+    : '<div class="status">Noch keine automatischen Lagerimporte</div>';
 }
 
 function setNested(target, path, value) {

@@ -59,6 +59,9 @@
       }
     ]
   },
+  "matching": {
+    "minAutoInventoryScore": 2000
+  },
   "mail": {
     "to": "michael@daltec.at",
     "subject": "Daltec Eduard Angebot",
@@ -85,6 +88,7 @@
   "data": {
     "preferLocalCsv": false,
     "lagerCsvPath": "data/lager.csv",
-    "inventoryMaxAgeHours": 24
+    "inventoryMaxAgeHours": 24,
+    "inventoryImportEmail": ""
   }
 }

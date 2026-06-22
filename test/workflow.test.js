@@ -16,6 +16,8 @@ import { labelForIgnoredRun, labelForProcessedRun } from '../src/mail-labels.js'
 import { buildReplayReport, replayMessages } from '../src/replay.js';
 import { defaultExportQuery, isProofCandidate } from '../src/export-mails.js';
 import { buildUnreadQuery } from '../src/adapters/google.js';
+import { isInventoryImportMessage, listInventoryImports, processInventoryImportMessage } from '../src/inventory-import.js';
+import { strToU8, zipSync } from 'fflate';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -977,3 +979,118 @@ test('proof Gmail export rejects internal owner and review digest mails', () => 
     ].join('\n')
   }, config), true);
 });
+
+test('imports dealer inventory CSV attachments with automatic column mapping', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'inventory-import-'));
+  const context = {
+    tenantId: 'inventory-import-test',
+    baseDir: dir,
+    tenantPath: path.join(dir, 'tenant.json'),
+    settingsPath: path.join(dir, 'settings.json'),
+    offersPath: path.join(dir, 'offers.jsonl'),
+    inventoryPath: path.join(dir, 'lager.csv'),
+    mailConnectionsPath: path.join(dir, 'mail-connections.json')
+  };
+  const csv = [
+    'Artikelnummer;Beschreibung;Bestand;EK;Laenge;Breite;Gewicht',
+    '3318-4-13-3563-N;Hochlader 330x180 3500kg;1;3900;3300;1800;3500'
+  ].join('\n');
+  const message = {
+    id: 'inventory-1',
+    subject: 'Lagerliste Eduard',
+    from: 'haendler@example.com',
+    to: 'lager@example.com',
+    attachments: [{ filename: 'lager.csv', data: Buffer.from(csv, 'utf8') }]
+  };
+
+  assert.equal(isInventoryImportMessage(message), true);
+  const result = await processInventoryImportMessage(message, { data: { lagerCsvPath: context.inventoryPath } }, context);
+  assert.equal(result.ok, true);
+  const written = await fs.readFile(context.inventoryPath, 'utf8');
+  assert.match(written, /Art\.-Nr\.;Art\.-Bez\.;Lagermenge;Lagerwert;Länge;Breite;hzGGew/);
+  assert.match(written, /3318-4-13-3563-N;Hochlader 330x180 3500kg;1;3900;3300;1800;3500/);
+  const imports = await listInventoryImports(5, context);
+  assert.equal(imports[0].status, 'success');
+  assert.equal(imports[0].rowCount, 1);
+});
+
+test('imports dealer inventory XLSX attachments with automatic column mapping', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'inventory-import-xlsx-'));
+  const context = {
+    tenantId: 'inventory-import-xlsx-test',
+    baseDir: dir,
+    tenantPath: path.join(dir, 'tenant.json'),
+    settingsPath: path.join(dir, 'settings.json'),
+    offersPath: path.join(dir, 'offers.jsonl'),
+    inventoryPath: path.join(dir, 'lager.csv'),
+    mailConnectionsPath: path.join(dir, 'mail-connections.json')
+  };
+  const buffer = buildMinimalXlsx([
+    ['SKU', 'Name', 'Stock', 'Price', 'Length', 'Width', 'KG'],
+    ['4020-4-AO3-3563-J', 'Autotransporter 406x200 3500kg', 1, 6900, 4060, 2000, 3500]
+  ]);
+
+  const result = await processInventoryImportMessage({
+    id: 'inventory-2',
+    subject: 'stock export',
+    from: 'dealer@example.com',
+    attachments: [{ filename: 'stock.xlsx', data: buffer }]
+  }, { data: { lagerCsvPath: context.inventoryPath } }, context);
+
+  assert.equal(result.ok, true);
+  const written = await fs.readFile(context.inventoryPath, 'utf8');
+  assert.match(written, /4020-4-AO3-3563-J;Autotransporter 406x200 3500kg;1;6900;4060;2000;3500/);
+});
+
+function buildMinimalXlsx(rows) {
+  const files = {
+    '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8"?>
+      <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+        <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+        <Default Extension="xml" ContentType="application/xml"/>
+        <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+        <Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+      </Types>`,
+    '_rels/.rels': `<?xml version="1.0" encoding="UTF-8"?>
+      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+      </Relationships>`,
+    'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8"?>
+      <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <sheets><sheet name="Lager" sheetId="1" r:id="rId1"/></sheets>
+      </workbook>`,
+    'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8"?>
+      <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+        <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+      </Relationships>`,
+    'xl/worksheets/sheet1.xml': `<?xml version="1.0" encoding="UTF-8"?>
+      <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+        <sheetData>${rows.map((row, rowIndex) => `<row r="${rowIndex + 1}">${row.map((cell, cellIndex) => xlsxCell(cell, rowIndex + 1, cellIndex + 1)).join('')}</row>`).join('')}</sheetData>
+      </worksheet>`
+  };
+  return Buffer.from(zipSync(Object.fromEntries(Object.entries(files).map(([name, content]) => [name, strToU8(content)]))));
+}
+
+function xlsxCell(value, row, col) {
+  const ref = `${columnName(col)}${row}`;
+  if (typeof value === 'number') return `<c r="${ref}"><v>${value}</v></c>`;
+  return `<c r="${ref}" t="inlineStr"><is><t>${escapeXml(value)}</t></is></c>`;
+}
+
+function columnName(index) {
+  let value = '';
+  while (index > 0) {
+    const remainder = (index - 1) % 26;
+    value = String.fromCharCode(65 + remainder) + value;
+    index = Math.floor((index - 1) / 26);
+  }
+  return value;
+}
+
+function escapeXml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}

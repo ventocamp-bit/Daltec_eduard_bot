@@ -14,6 +14,11 @@ import { resolveTenantContextForInbound } from './dealer-routing.js';
 import { isInternalOwnerDraft } from './internal-mail.js';
 import { labelForIgnoredRun, labelForProcessedRun } from './mail-labels.js';
 import {
+  buildInventoryImportFailureMail,
+  isInventoryImportMessage,
+  processInventoryImportMessage
+} from './inventory-import.js';
+import {
   appendOfferRunEvent,
   ingestInboundMessage,
   loadOfferRun,
@@ -78,7 +83,7 @@ async function pollCentralForwardingInbox() {
     }
   };
   const mailRuntime = await createMailRuntime(effectiveConfig, defaultTenantContext, { allowLegacyGoogleToken: true });
-  const messages = await mailRuntime.fetchUnreadMessages(mailRuntime.client, effectiveConfig);
+  const messages = await fetchPollMessages(mailRuntime, effectiveConfig);
 
   for (const message of messages) {
     try {
@@ -109,7 +114,7 @@ async function pollConnectedTenantInboxes() {
         }
       };
       const mailRuntime = await createMailRuntime(effectiveConfig, context, { allowLegacyGoogleToken: false });
-      const messages = await mailRuntime.fetchUnreadMessages(mailRuntime.client, effectiveConfig);
+      const messages = await fetchPollMessages(mailRuntime, effectiveConfig);
 
       for (const message of messages) {
         try {
@@ -123,6 +128,21 @@ async function pollConnectedTenantInboxes() {
       console.error(`[poll:${context.tenantId}] ${error.message}`);
     }
   }
+}
+
+async function fetchPollMessages(mailRuntime, effectiveConfig) {
+  const messages = await mailRuntime.fetchUnreadMessages(mailRuntime.client, effectiveConfig);
+  if (mailRuntime.provider !== 'gmail') return messages;
+  const inventoryMessages = await mailRuntime.fetchUnreadMessages(mailRuntime.client, {
+    ...effectiveConfig,
+    gmail: {
+      ...effectiveConfig.gmail,
+      query: effectiveConfig.gmail.inventoryQuery || 'is:unread has:attachment {lager bestand inventory stock lagerliste fahrzeugliste}'
+    }
+  }).catch(() => []);
+  const byId = new Map();
+  for (const message of [...messages, ...inventoryMessages]) byId.set(message.id, message);
+  return [...byId.values()];
 }
 
 async function processMailMessage(message, mailRuntime, effectiveConfig, settings, options = {}) {
@@ -140,6 +160,28 @@ async function processMailMessage(message, mailRuntime, effectiveConfig, setting
       rawText: message.text || ''
     });
     const messageSettings = await loadSettings(messageContext);
+
+    if (isInventoryImportMessage(message, messageSettings)) {
+      const result = await processInventoryImportMessage(message, messageSettings, messageContext);
+      if (!result.ok) {
+        const reply = buildInventoryImportFailureMail(result, messageSettings);
+        const to = extractEmailAddress(message.from);
+        if (to) {
+          await mailRuntime.sendHtmlMail(mailRuntime.client, {
+            to,
+            cc: messageSettings.mail?.to || effectiveConfig.gmail.to,
+            subject: reply.subject,
+            html: reply.html
+          }).catch((error) => console.error(`[inventory-import-reply] ${message.id}: ${error.message}`));
+        }
+        await mailRuntime.labelMessage(mailRuntime.client, message.id, 'Eduard/inventory-import-failed').catch(() => null);
+      } else {
+        await mailRuntime.labelMessage(mailRuntime.client, message.id, 'Eduard/inventory-imported').catch(() => null);
+      }
+      await mailRuntime.markMessageRead(mailRuntime.client, message.id);
+      console.log(`Lagerimport: ${message.id} -> ${result.ok ? 'ok' : 'failed'}`);
+      return;
+    }
 
     const inbound = await ingestInboundMessage({
       provider: mailRuntime.provider,
@@ -194,6 +236,11 @@ async function processMailMessage(message, mailRuntime, effectiveConfig, setting
     await mailRuntime.labelMessage(mailRuntime.client, message.id, labelForProcessedRun(processed.status, currentRun));
     await mailRuntime.markMessageRead(mailRuntime.client, message.id);
     console.log(`Verarbeitet: ${message.id} -> owner (${processed.status})`);
+}
+
+function extractEmailAddress(value) {
+  const match = String(value || '').match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  return match ? match[1] : '';
 }
 
 async function runOnceSafely() {

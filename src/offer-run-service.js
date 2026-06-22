@@ -133,7 +133,8 @@ export async function processOfferRun(runId, context = {}) {
 
     const pricingWarnings = collectPricingWarnings(result);
     const hasPriceReviewWarning = pricingWarnings.length > 0;
-    const weakInventoryMatch = match.hasInventoryMatch && match.matchScore < 1000;
+    const minAutoInventoryScore = Number(settings.matching?.minAutoInventoryScore ?? 2000);
+    const weakInventoryMatch = match.hasInventoryMatch && match.matchScore < minAutoInventoryScore;
     const finalStatus = match.hasInventoryMatch && !weakInventoryMatch && !hasPriceReviewWarning ? 'completed' : 'needs_review';
     const inventoryWarning = inventoryMeta.stale ? 'inventory_stale' : null;
     const errorCode = inventoryWarning ||
@@ -178,7 +179,7 @@ export async function processOfferRun(runId, context = {}) {
       event_type: inventoryMeta.stale ? 'inventory_stale' : (hasPriceReviewWarning ? 'price_needs_review' : (finalStatus === 'completed' ? 'run_completed' : 'run_needs_review')),
       level: inventoryMeta.stale || finalStatus !== 'completed' ? 'warning' : 'info',
       message: inventoryMeta.stale ? 'Inventory CSV is stale' : (hasPriceReviewWarning ? 'Price needs owner review' : (finalStatus === 'completed' ? 'Run completed' : 'Run needs owner review')),
-      metadata: { status: inventoryMeta.stale ? 'needs_review' : finalStatus, inventory: inventoryMeta, pricingWarnings }
+      metadata: { status: inventoryMeta.stale ? 'needs_review' : finalStatus, inventory: inventoryMeta, pricingWarnings, minAutoInventoryScore }
     }, context);
   } catch (error) {
     await markRunFailure(runId, 'failed_retryable', 'processing_failed', error.message, context);

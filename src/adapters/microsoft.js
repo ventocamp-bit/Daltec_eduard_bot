@@ -22,13 +22,13 @@ export async function fetchUnreadMessages(client, config) {
   const url = new URL(`${GRAPH_BASE}/me/messages`);
   url.searchParams.set('$top', '10');
   url.searchParams.set('$filter', 'isRead eq false');
-  url.searchParams.set('$select', 'id,subject,from,toRecipients,receivedDateTime,body,bodyPreview');
+  url.searchParams.set('$select', 'id,subject,from,toRecipients,receivedDateTime,body,bodyPreview,hasAttachments');
   url.searchParams.set('$orderby', 'receivedDateTime desc');
 
   const data = await graphRequest(client, url.toString());
   const senderQuery = String(config.gmail?.senderQuery || '').toLowerCase();
 
-  return (data.value || [])
+  const messages = (data.value || [])
     .filter((message) => {
       if (!senderQuery) return true;
       const from = [
@@ -44,8 +44,13 @@ export async function fetchUnreadMessages(client, config) {
       to: (message.toRecipients || []).map((recipient) => recipient.emailAddress?.address || recipient.emailAddress?.name || '').filter(Boolean).join(', '),
       received_at: message.receivedDateTime || new Date().toISOString(),
       html: message.body?.contentType === 'html' ? message.body.content || '' : '',
-      text: message.body?.contentType === 'text' ? message.body.content || '' : message.bodyPreview || ''
+      text: message.body?.contentType === 'text' ? message.body.content || '' : message.bodyPreview || '',
+      hasAttachments: message.hasAttachments === true
     }));
+  for (const message of messages) {
+    message.attachments = message.hasAttachments ? await fetchMessageAttachments(client, message.id) : [];
+  }
+  return messages;
 }
 
 export async function markMessageRead(client, id) {
@@ -143,5 +148,19 @@ function toRecipientList(value) {
     .filter(Boolean)
     .map((address) => ({
       emailAddress: { address }
+    }));
+}
+
+async function fetchMessageAttachments(client, messageId) {
+  const url = new URL(`${GRAPH_BASE}/me/messages/${encodeURIComponent(messageId)}/attachments`);
+  url.searchParams.set('$select', 'name,contentType,size,contentBytes');
+  const data = await graphRequest(client, url.toString());
+  return (data.value || [])
+    .filter((attachment) => attachment.contentBytes)
+    .map((attachment) => ({
+      filename: attachment.name || '',
+      mimeType: attachment.contentType || '',
+      size: attachment.size || 0,
+      data: Buffer.from(attachment.contentBytes, 'base64')
     }));
 }

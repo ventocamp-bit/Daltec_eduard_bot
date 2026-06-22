@@ -61,13 +61,14 @@ export async function fetchUnreadMessages(gmail, config) {
       id: message.id,
       format: 'full'
     });
-    hydrated.push(parseGmailMessage(detail.data));
+    hydrated.push(await parseGmailMessage(detail.data, gmail));
   }
 
   return hydrated;
 }
 
 export function buildUnreadQuery(config) {
+  if (config.gmail.query) return config.gmail.query;
   const parts = ['is:unread'];
   if (config.gmail.senderQuery) parts.push(`from:${config.gmail.senderQuery}`);
   if (config.gmail.subjectFilter) parts.push(`subject:${config.gmail.subjectFilter}`);
@@ -98,7 +99,7 @@ export async function searchMessages(gmail, query, maxResults = 20) {
       id: message.id,
       format: 'full'
     });
-    hydrated.push(parseGmailMessage(detail.data));
+    hydrated.push(await parseGmailMessage(detail.data, gmail));
   }
 
   return hydrated;
@@ -171,11 +172,22 @@ export async function readSheetObjects(sheets, spreadsheetId, range) {
   return rows.slice(1).map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index] || ''])));
 }
 
-function parseGmailMessage(message) {
+async function parseGmailMessage(message, gmail) {
   const headers = Object.fromEntries((message.payload?.headers || []).map((header) => [header.name.toLowerCase(), header.value]));
   const parts = flattenParts(message.payload);
   const htmlPart = parts.find((part) => part.mimeType === 'text/html');
   const textPart = parts.find((part) => part.mimeType === 'text/plain');
+  const attachmentParts = parts.filter((part) => part.filename && (part.body?.attachmentId || part.body?.data));
+  const attachments = [];
+  for (const part of attachmentParts) {
+    const data = part.body?.data || await fetchAttachmentData(gmail, message.id, part.body?.attachmentId);
+    attachments.push({
+      filename: part.filename,
+      mimeType: part.mimeType || '',
+      size: part.body?.size || 0,
+      data: decodeBuffer(data)
+    });
+  }
 
   return {
     id: message.id,
@@ -183,7 +195,8 @@ function parseGmailMessage(message) {
     from: headers.from || '',
     to: headers.to || '',
     html: decodeBody(htmlPart?.body?.data),
-    text: decodeBody(textPart?.body?.data) || message.snippet || ''
+    text: decodeBody(textPart?.body?.data) || message.snippet || '',
+    attachments
   };
 }
 
@@ -194,5 +207,19 @@ function flattenParts(part) {
 
 function decodeBody(data) {
   if (!data) return '';
-  return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+  return decodeBuffer(data).toString('utf8');
+}
+
+function decodeBuffer(data) {
+  return Buffer.from(String(data || '').replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+}
+
+async function fetchAttachmentData(gmail, messageId, attachmentId) {
+  if (!attachmentId) return '';
+  const response = await gmail.users.messages.attachments.get({
+    userId: 'me',
+    messageId,
+    id: attachmentId
+  });
+  return response.data.data || '';
 }

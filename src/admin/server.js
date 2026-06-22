@@ -26,6 +26,7 @@ import { buildRuntimeReadiness } from '../production-readiness.js';
 import { exportGmailMessages } from '../export-mails.js';
 import { extractInquiry } from '../core/parser.js';
 import { resolveProductCategory } from '../core/pricing.js';
+import { listInventoryImports } from '../inventory-import.js';
 import {
   buildReviewQueue as buildSharedReviewQueue,
   sendReviewQueueDigest as sendSharedReviewQueueDigest
@@ -336,10 +337,21 @@ export function createAdminApp(options = {}) {
   app.get('/api/data-status', async (req, res, next) => {
   try {
     const settings = await loadSettings(req.tenantContext);
+    const latestImport = (await listInventoryImports(1, req.tenantContext))[0] || null;
     res.json({
       lagerCsvExists: await fileExists(settings.data?.lagerCsvPath || req.tenantContext.inventoryPath),
-      usingLocalCsv: settings.data?.preferLocalCsv === true
+      usingLocalCsv: settings.data?.preferLocalCsv === true,
+      inventoryImportEmail: settings.data?.inventoryImportEmail || settings.onboarding?.inventoryImportEmail || null,
+      latestInventoryImport: latestImport
     });
+  } catch (error) {
+    next(error);
+  }
+  });
+
+  app.get('/api/inventory-imports', async (req, res, next) => {
+  try {
+    res.json(await listInventoryImports(Number(req.query.limit || 20), req.tenantContext));
   } catch (error) {
     next(error);
   }
