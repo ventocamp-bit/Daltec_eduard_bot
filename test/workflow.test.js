@@ -189,6 +189,35 @@ test('extracts DE CZ NL FR PL EN IT customer labels from Eduard inquiries', () =
   }
 });
 
+test('detects input language from Eduard subject and field labels', () => {
+  const fixtures = [
+    { expected: 'de', subject: 'Neue Eduard Anfrage', labels: ['Vorname', 'Nachname', 'E-mail-Adresse'] },
+    { expected: 'nl', subject: 'Eduard offerte aanvraag', labels: ['Voornaam', 'Achternaam', 'E-mailadres'] },
+    { expected: 'fr', subject: 'Demande de devis Eduard', labels: ['Pr\u00e9nom', 'Nom', 'Adresse e-mail'] },
+    { expected: 'cs', subject: 'Nov\u00e1 popt\u00e1vka Eduard', labels: ['Jm\u00e9no', 'P\u0159\u00edjmen\u00ed', 'Emailov\u00e1 adresa'] },
+    { expected: 'pl', subject: 'Zapytanie Eduard', labels: ['Imi\u0119', 'Nazwisko', 'Adres e-mail'] },
+    { expected: 'en', subject: 'Eduard offer request', labels: ['First name', 'Last name', 'Email address'] },
+    { expected: 'it', subject: 'Richiesta offerta Eduard', labels: ['Nome', 'Cognome', 'Indirizzo e-mail'] }
+  ];
+
+  for (const fixture of fixtures) {
+    const result = extractInquiry({
+      subject: fixture.subject,
+      text: [
+        fixture.labels[0],
+        'Alex',
+        fixture.labels[1],
+        'Customer',
+        fixture.labels[2],
+        `${fixture.expected}@example.com`,
+        'Hochlader 3318 3500kg â‚¬ 3.000,00'
+      ].join('\n')
+    });
+
+    assert.equal(result.input_language, fixture.expected, fixture.expected);
+  }
+});
+
 test('extracts Eduard SKU NOT FOUND information requests as reviewable line items', () => {
   const result = extractInquiry({
     text: [

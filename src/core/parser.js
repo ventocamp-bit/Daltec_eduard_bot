@@ -45,9 +45,39 @@ function extractAnyValue(html, text, labels) {
   return '';
 }
 
+const LANGUAGE_SIGNALS = [
+  { language: 'cs', patterns: [/jm[eě]no/i, /p[řr]ijmen[ií]/i, /emailov[aá] adresa/i, /telefonn[ií] [cč][ií]slo/i, /nov[aá] popt[aá]vka/i] },
+  { language: 'nl', patterns: [/voornaam/i, /achternaam/i, /e-mailadres/i, /telefoonnummer/i, /\bofferte\b/i, /\baanvraag\b/i] },
+  { language: 'fr', patterns: [/pr[eé]nom/i, /\bnom\b/i, /adresse e-mail/i, /num[eé]ro de t[eé]l[eé]phone/i, /demande de devis/i] },
+  { language: 'pl', patterns: [/imi[eę]/i, /nazwisko/i, /adres e-mail/i, /numer telefonu/i, /zapytanie/i] },
+  { language: 'en', patterns: [/first name/i, /last name/i, /email address/i, /phone number/i, /offer request/i] },
+  { language: 'it', patterns: [/\bnome\b/i, /cognome/i, /indirizzo e-mail/i, /numero di telefono/i, /richiesta offerta/i] }
+];
+
+function normalizeLanguageText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase();
+}
+
+function detectInputLanguage(raw = {}, html = '', text = '') {
+  const haystack = normalizeLanguageText([
+    raw.subject || raw.Subject || '',
+    text,
+    stripHtml(html)
+  ].join('\n'));
+
+  for (const signal of LANGUAGE_SIGNALS) {
+    if (signal.patterns.some((pattern) => pattern.test(haystack))) return signal.language;
+  }
+  return 'de';
+}
+
 export function extractInquiry(raw = {}) {
   const html = raw.html || raw.bodyHtml || '';
   const text = raw.text || raw.bodyText || '';
+  const inputLanguage = detectInputLanguage(raw, html, text);
   const articleNumbers = extractArticleNumbers(text || stripHtml(html));
 
   const vorname = extractAnyValue(html, text, ['Vorname', 'Jméno']) || 'Kunde';
@@ -145,6 +175,7 @@ export function extractInquiry(raw = {}) {
     kunde_email: mappedEmailMatch ? mappedEmailMatch[1] : 'keine@email.com',
     kunde_adresse: mappedAdresse,
     kunde_telefon: mappedTelefon,
+    input_language: inputLanguage,
     line_items: lineItems
   };
 }
