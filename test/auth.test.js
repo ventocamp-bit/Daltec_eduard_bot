@@ -153,6 +153,46 @@ test('admin API requires login session', async () => {
     });
     assert.equal(allowed.status, 200);
 
+    const invalidSettings = await fetch(`${baseUrl}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        pricing: {
+          discountPercent: 2434,
+          roundTo: 123,
+          vatRate: 0.2,
+          offerFactor: 0.87,
+          inventoryFallbackMarkupPercent: 0
+        }
+      })
+    });
+    assert.equal(invalidSettings.status, 400);
+    const invalidSettingsBody = await invalidSettings.json();
+    assert.equal(invalidSettingsBody.error, 'settings_invalid');
+    assert.equal(invalidSettingsBody.validation.errors[0].field, 'pricing.discountPercent');
+    assert.match(invalidSettingsBody.validation.errors[0].message, /0.*80/);
+
+    const validSettings = await fetch(`${baseUrl}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        pricing: {
+          discountPercent: 13,
+          roundTo: 10,
+          vatRate: 0.2,
+          offerFactor: 0.87,
+          inventoryFallbackMarkupPercent: 18
+        }
+      })
+    });
+    assert.equal(validSettings.status, 200);
+    const validSettingsBody = await validSettings.json();
+    assert.equal(validSettingsBody.pricing.discountPercent, 13);
+    assert.equal(validSettingsBody.pricing.roundTo, 10);
+    assert.equal(validSettingsBody.pricing.vatRate, 0.2);
+    assert.equal(validSettingsBody.pricing.offerFactor, 0.87);
+    assert.equal(validSettingsBody.pricing.inventoryFallbackMarkupPercent, 18);
+
     const setup = await fetch(`${baseUrl}/api/setup-status`, {
       headers: { Cookie: cookie }
     });

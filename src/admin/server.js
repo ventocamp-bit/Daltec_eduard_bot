@@ -328,6 +328,15 @@ export function createAdminApp(options = {}) {
 
   app.post('/api/settings', async (req, res, next) => {
   try {
+    const validation = validateSettingsPayload(req.body || {});
+    if (!validation.ok) {
+      res.status(400).json({
+        error: 'settings_invalid',
+        message: 'Einstellungen wurden nicht gespeichert, weil Preiswerte ungültig sind.',
+        validation
+      });
+      return;
+    }
     res.json(await saveSettings(req.body, req.tenantContext));
   } catch (error) {
     next(error);
@@ -693,6 +702,33 @@ function authorizeIngest(req) {
     const error = new Error('unauthorized_inbound_request');
     error.statusCode = 401;
     throw error;
+  }
+}
+
+function validateSettingsPayload(payload = {}) {
+  const pricing = payload.pricing || {};
+  const errors = [];
+  checkRange(errors, pricing, 'discountPercent', 0, 80, 'Basis-Rabatt % muss zwischen 0 und 80 liegen.');
+  checkWhitelist(errors, pricing, 'roundTo', [1, 5, 10, 50, 100], 'Rundung auf muss 1, 5, 10, 50 oder 100 sein.');
+  checkRange(errors, pricing, 'vatRate', 0, 0.5, 'MwSt. muss zwischen 0.0 und 0.5 liegen.');
+  checkRange(errors, pricing, 'offerFactor', 0.5, 1.0, 'Offer-Faktor muss zwischen 0.5 und 1.0 liegen.');
+  checkRange(errors, pricing, 'inventoryFallbackMarkupPercent', 0, 200, 'EK-Aufschlag Lager % muss zwischen 0 und 200 liegen.');
+  return { ok: errors.length === 0, errors };
+}
+
+function checkRange(errors, object, key, min, max, message) {
+  if (object[key] === undefined || object[key] === '') return;
+  const value = Number(object[key]);
+  if (!Number.isFinite(value) || value < min || value > max) {
+    errors.push({ field: `pricing.${key}`, code: 'out_of_range', message, min, max, value: object[key] });
+  }
+}
+
+function checkWhitelist(errors, object, key, allowed, message) {
+  if (object[key] === undefined || object[key] === '') return;
+  const value = Number(object[key]);
+  if (!Number.isFinite(value) || !allowed.includes(value)) {
+    errors.push({ field: `pricing.${key}`, code: 'not_allowed', message, allowed, value: object[key] });
   }
 }
 
