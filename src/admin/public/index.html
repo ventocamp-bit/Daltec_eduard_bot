@@ -9,8 +9,9 @@
   <body>
     <section id="login-view" class="login-view" hidden>
       <form id="login-form" class="login-card" method="post" action="/login">
-        <h1>Eduard Admin</h1>
-        <p>Anmelden, Angebot prüfen, Preise verwalten.</p>
+        <p class="eyebrow">Eduard Angebote</p>
+        <h1>Einloggen</h1>
+        <p>Angebote pr&uuml;fen, Preise pflegen, Texte anpassen.</p>
         <label>E-Mail <input id="login-email" name="email" type="email" autocomplete="username" value="admin@daltec.local"></label>
         <label>Passwort <input id="login-password" name="password" type="password" autocomplete="current-password" value="admin"></label>
         <button type="submit">Anmelden</button>
@@ -19,218 +20,244 @@
       </form>
     </section>
 
-    <main id="app-view" hidden>
-      <header>
-        <div>
-          <h1>Eduard Admin</h1>
-          <p>Angebot prüfen, Preise ändern, speichern.</p>
-        </div>
-        <div class="header-actions">
-          <button id="logout" type="button" class="secondary">Abmelden</button>
-          <button id="save">Speichern</button>
-        </div>
-      </header>
-
-      <section class="overview-panel">
-        <div id="overview-grid" class="overview-grid">
-          <article class="overview-card">
-            <small>Betrieb</small>
-            <strong id="overview-operation">Lädt...</strong>
-            <span id="overview-operation-detail">Mail und CSV werden geprüft.</span>
-          </article>
-          <article class="overview-card">
-            <small>Proof</small>
-            <strong id="overview-proof">Lädt...</strong>
-            <span id="overview-proof-detail">Runs und Blocker werden geprüft.</span>
-          </article>
-          <article class="overview-card">
-            <small>Feedback</small>
-            <strong id="overview-feedback">Lädt...</strong>
-            <span id="overview-feedback-detail">Offene Bewertungen werden geladen.</span>
-          </article>
-        </div>
-      </section>
-
-      <section class="workspace">
-        <div class="preview-panel">
-          <div class="panel-head">
-            <strong>Vorschau</strong>
-            <span>Live</span>
+    <main id="app-view" class="app-shell" hidden>
+      <aside class="sidebar">
+        <div class="brand-block">
+          <span class="brand-mark">E</span>
+          <div>
+            <strong>Eduard</strong>
+            <small>Angebots-Workspace</small>
           </div>
-          <iframe id="preview-frame" title="Mail Vorschau"></iframe>
         </div>
+
+        <nav class="sidebar-nav" aria-label="Admin Bereiche">
+          <button type="button" class="nav-item active" data-panel-target="review-panel">Review</button>
+          <button type="button" class="nav-item" data-panel-target="customize-panel">Individualisieren</button>
+          <button type="button" class="nav-item" data-panel-target="data-panel">Daten & Mail</button>
+          <button type="button" class="nav-item" data-panel-target="diagnostics-panel">Diagnose</button>
+        </nav>
+
+        <div class="sidebar-status">
+          <small>Proof</small>
+          <strong id="overview-proof">L&auml;dt...</strong>
+          <span id="overview-proof-detail">Runs werden gepr&uuml;ft.</span>
+        </div>
+        <button id="logout" type="button" class="secondary full-width">Abmelden</button>
+      </aside>
+
+      <section class="content-shell">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Live Admin</p>
+            <h1>Angebote steuern</h1>
+            <p>Links pr&uuml;fen, rechts anpassen. Alles speichert in den Tenant-Settings.</p>
+          </div>
+          <div class="header-actions">
+            <button id="save">Speichern</button>
+          </div>
+        </header>
+
+        <section class="overview-panel">
+          <div id="overview-grid" class="overview-grid">
+            <article class="overview-card">
+              <small>Betrieb</small>
+              <strong id="overview-operation">L&auml;dt...</strong>
+              <span id="overview-operation-detail">Mail und CSV werden gepr&uuml;ft.</span>
+            </article>
+            <article class="overview-card">
+              <small>Feedback</small>
+              <strong id="overview-feedback">L&auml;dt...</strong>
+              <span id="overview-feedback-detail">Offene Bewertungen werden geladen.</span>
+            </article>
+            <article class="overview-card compact-upload">
+              <small>Lagerdaten</small>
+              <label class="file-drop">CSV hochladen <input id="lager-upload" type="file" accept=".csv,text/csv"></label>
+              <span id="data-status">Keine CSV geladen</span>
+            </article>
+          </div>
+        </section>
 
         <form id="settings-form" accept-charset="UTF-8">
-          <fieldset class="primary-settings">
-            <legend>Preise</legend>
-            <div class="inline">
-              <label>Basis-Rabatt % <input name="pricing.discountPercent" type="number" step="1" min="0" max="80"></label>
-              <label>Rundung auf <input name="pricing.roundTo" type="number" step="5" min="5" max="100"></label>
-              <label>MwSt. % <input name="pricing.vatPercent" type="number" step="1" min="0" max="30"></label>
-              <label>EK-Aufschlag Lager % <input name="pricing.inventoryFallbackMarkupPercent" type="number" step="1" min="0" max="300"></label>
+          <section id="review-panel" class="workspace panel-view active">
+            <div class="preview-panel">
+              <div class="panel-head">
+                <div>
+                  <strong>Mail-Vorschau</strong>
+                  <span>So sieht der aktuelle Entwurf aus.</span>
+                </div>
+                <span>Live</span>
+              </div>
+              <iframe id="preview-frame" title="Mail Vorschau"></iframe>
             </div>
 
-            <div class="rules-head">
-              <strong>Produktgruppen</strong>
-              <button id="add-product-group" type="button" class="secondary">Gruppe hinzufügen</button>
+            <section class="review-panel">
+              <div class="panel-head">
+                <div>
+                  <strong>Review Queue</strong>
+                  <span>Offene Drafts bewerten.</span>
+                </div>
+                <div class="panel-actions">
+                  <span id="review-state">Pr&uuml;fe...</span>
+                  <button id="send-review-digest" type="button" class="secondary">Digest senden</button>
+                </div>
+              </div>
+              <div id="review-list" class="review-list"></div>
+            </section>
+          </section>
+
+          <section id="customize-panel" class="panel-view">
+            <div class="settings-layout">
+              <fieldset class="primary-settings">
+                <legend>Preise</legend>
+                <div class="inline">
+                  <label>Basis-Rabatt % <input name="pricing.discountPercent" type="number" step="1" min="0" max="80"></label>
+                  <label>Rundung auf <input name="pricing.roundTo" type="number" step="5" min="5" max="100"></label>
+                  <label>MwSt. % <input name="pricing.vatPercent" type="number" step="1" min="0" max="30"></label>
+                  <label>EK-Aufschlag Lager % <input name="pricing.inventoryFallbackMarkupPercent" type="number" step="1" min="0" max="300"></label>
+                </div>
+
+                <div class="rules-head">
+                  <strong>Produktgruppen</strong>
+                  <button id="add-product-group" type="button" class="secondary">Gruppe hinzuf&uuml;gen</button>
+                </div>
+                <div class="rule-table" id="product-groups"></div>
+
+                <div class="rules-head">
+                  <strong>Sonderregeln</strong>
+                  <button id="add-price-rule" type="button" class="secondary">Regel hinzuf&uuml;gen</button>
+                </div>
+                <div class="rule-table" id="price-rules"></div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Texte & Marke</legend>
+                <div class="inline two">
+                  <label>H&auml;ndlername <input name="dealer.name" type="text"></label>
+                  <label>Standort <input name="dealer.locationName" type="text"></label>
+                  <label>Lieferzeit <input name="dealer.defaultDeliveryTime" type="text"></label>
+                  <label>Abschluss-Satz <input name="mail.copyQuestion" type="text"></label>
+                  <label>Gru&szlig; <input name="signature.greeting" type="text"></label>
+                  <label>Name <input name="signature.name" type="text"></label>
+                  <label>Firma <input name="signature.company" type="text"></label>
+                  <label>Telefon <input name="signature.phone" type="text"></label>
+                  <label>E-Mail <input name="signature.email" type="text"></label>
+                  <label>Website <input name="signature.website" type="text"></label>
+                  <label>Adresse 1 <input name="signature.address1" type="text"></label>
+                  <label>Adresse 2 <input name="signature.address2" type="text"></label>
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Farben</legend>
+                <div class="swatch-row">
+                  <label>Header <input name="table.headerBackground" type="color"></label>
+                  <label>Akzent <input name="table.accentColor" type="color"></label>
+                  <label>Text <input name="table.textColor" type="color"></label>
+                </div>
+              </fieldset>
             </div>
-            <div class="rule-table" id="product-groups"></div>
+          </section>
 
-            <div class="rules-head">
-              <strong>Sonderregeln</strong>
-              <button id="add-price-rule" type="button" class="secondary">Regel hinzufügen</button>
+          <section id="data-panel" class="panel-view">
+            <div class="settings-layout two-columns">
+              <fieldset>
+                <legend>Mail Eingang</legend>
+                <div class="setup-actions">
+                  <label>Gmail-Regel <input id="gmail-query" type="text" readonly></label>
+                  <div class="connector-grid">
+                    <a id="gmail-connect" class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
+                    <a id="outlook-connect" class="button-link secondary-link" href="/api/oauth/microsoft/start">Outlook verbinden</a>
+                  </div>
+                  <div class="status" id="mail-status">Mailstatus wird geladen...</div>
+                  <div class="button-row">
+                    <a class="button-link secondary-link" href="/api/sample-csv">Muster-CSV</a>
+                    <button id="copy-query" type="button" class="secondary">Regel kopieren</button>
+                  </div>
+                  <div class="status" id="setup-next">CSV laden, Mail verbinden, Polling starten.</div>
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend>Interne Mail</legend>
+                <div class="inline two">
+                  <label>Empf&auml;nger intern <input name="mail.to" type="email"></label>
+                  <label>Betreff intern <input name="mail.subject" type="text"></label>
+                  <label>Antwortmodus
+                    <select name="mail.deliveryMode">
+                      <option value="owner_review">Intern pr&uuml;fen</option>
+                      <option value="customer_auto">Direkt an Kunden</option>
+                    </select>
+                  </label>
+                </div>
+              </fieldset>
             </div>
-            <div class="rule-table" id="price-rules"></div>
 
-            <label>Abschluss-Satz <input name="mail.copyQuestion" type="text"></label>
-          </fieldset>
-
-          <details class="settings-details">
-            <summary>Weitere Einstellungen</summary>
-
-            <fieldset>
-              <legend>Mail</legend>
-              <div class="inline two">
-                <label>Empfänger intern <input name="mail.to" type="email"></label>
-                <label>Betreff intern <input name="mail.subject" type="text"></label>
-                <label>Antwortmodus
-                  <select name="mail.deliveryMode">
-                    <option value="owner_review">Intern prüfen</option>
-                    <option value="customer_auto">Direkt an Kunden</option>
-                  </select>
-                </label>
+            <section class="setup-panel">
+              <div class="panel-head">
+                <div>
+                  <strong>Schnellstart</strong>
+                  <span>Was noch fehlt, bis der Tenant arbeitet.</span>
+                </div>
+                <span id="setup-ready">Pr&uuml;fe Setup...</span>
               </div>
-            </fieldset>
-
-            <fieldset>
-              <legend>Händler</legend>
-              <div class="inline two">
-                <label>Händlername <input name="dealer.name" type="text"></label>
-                <label>Standort <input name="dealer.locationName" type="text"></label>
-                <label>Lieferzeit <input name="dealer.defaultDeliveryTime" type="text"></label>
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend>Signatur</legend>
-              <div class="inline two">
-                <label>Gruß <input name="signature.greeting" type="text"></label>
-                <label>Name <input name="signature.name" type="text"></label>
-                <label>Firma <input name="signature.company" type="text"></label>
-                <label>Telefon <input name="signature.phone" type="text"></label>
-                <label>E-Mail <input name="signature.email" type="text"></label>
-                <label>Website <input name="signature.website" type="text"></label>
-                <label>Adresse 1 <input name="signature.address1" type="text"></label>
-                <label>Adresse 2 <input name="signature.address2" type="text"></label>
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend>Farben</legend>
-              <div class="inline">
-                <label>Header <input name="table.headerBackground" type="color"></label>
-                <label>Akzent <input name="table.accentColor" type="color"></label>
-                <label>Text <input name="table.textColor" type="color"></label>
-              </div>
-            </fieldset>
-
-            <fieldset>
-              <legend>Lager und Preise</legend>
-              <label>CSV hochladen <input id="lager-upload" type="file" accept=".csv,text/csv"></label>
-              <div class="status" id="data-status">Keine CSV geladen</div>
-            </fieldset>
-          </details>
+              <div id="setup-checks" class="setup-checks setup-checks-wide"></div>
+            </section>
+          </section>
         </form>
-      </section>
 
-      <section class="review-panel">
-        <div class="panel-head">
-          <strong>Review Queue</strong>
-          <div class="panel-actions">
-            <span id="review-state">Prüfe...</span>
-            <button id="send-review-digest" type="button" class="secondary">Digest senden</button>
-          </div>
-        </div>
-        <div id="review-list" class="review-list"></div>
-      </section>
-
-      <details class="diagnostic-details">
-        <summary>Diagnose und Setup</summary>
-
-        <section class="setup-panel">
-          <div class="panel-head">
-            <strong>Schnellstart</strong>
-            <span id="setup-ready">Prüfe Setup...</span>
-          </div>
-          <div class="setup-grid">
-            <div id="setup-checks" class="setup-checks"></div>
-            <div class="setup-actions">
-              <label>Gmail-Regel <input id="gmail-query" type="text" readonly></label>
-              <div class="connector-grid">
-                <a id="gmail-connect" class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
-                <a id="outlook-connect" class="button-link secondary-link" href="/api/oauth/microsoft/start">Outlook verbinden</a>
-              </div>
-              <div class="status" id="mail-status">Mailstatus wird geladen...</div>
-              <div class="button-row">
-                <a class="button-link" href="/api/sample-csv">Muster-CSV</a>
-                <button id="copy-query" type="button" class="secondary">Regel kopieren</button>
-              </div>
-              <div class="status" id="setup-next">CSV laden, Gmail verbinden, Polling starten.</div>
+        <section id="diagnostics-panel" class="panel-view">
+          <section class="monitor-panel">
+            <div class="panel-head">
+              <strong>Monitoring</strong>
+              <span id="monitoring-state">Pr&uuml;fe...</span>
             </div>
-          </div>
-        </section>
+            <div id="monitoring-grid" class="monitoring-grid"></div>
+            <div id="monitoring-alerts" class="monitoring-alerts"></div>
+          </section>
 
-        <section class="monitor-panel">
-          <div class="panel-head">
-            <strong>Monitoring</strong>
-            <span id="monitoring-state">Prüfe...</span>
-          </div>
-          <div id="monitoring-grid" class="monitoring-grid"></div>
-          <div id="monitoring-alerts" class="monitoring-alerts"></div>
-        </section>
-
-        <section class="saas-panel">
-          <div class="panel-head">
-            <strong>SaaS Readiness</strong>
-            <span id="saas-state">Prüfe...</span>
-          </div>
-          <div id="saas-grid" class="monitoring-grid"></div>
-          <div id="saas-blockers" class="monitoring-alerts"></div>
-        </section>
-
-        <section class="stack-panel">
-          <div class="panel-head compact">
-            <strong>Lagerimporte</strong>
-            <span id="inventory-import-count">0</span>
-          </div>
-          <div id="inventory-import-list" class="offer-list"></div>
-        </section>
-
-        <section class="history-grid">
-          <section class="stack-panel">
-            <div class="panel-head compact">
-              <strong>Letzte Angebote</strong>
-              <span id="offer-count">0</span>
+          <section class="saas-panel">
+            <div class="panel-head">
+              <strong>SaaS Readiness</strong>
+              <span id="saas-state">Pr&uuml;fe...</span>
             </div>
-            <div id="offer-list" class="offer-list"></div>
+            <div id="saas-grid" class="monitoring-grid"></div>
+            <div id="saas-blockers" class="monitoring-alerts"></div>
           </section>
 
           <section class="stack-panel">
             <div class="panel-head compact">
-              <strong>Verarbeitungen</strong>
-              <span id="run-count">0</span>
+              <strong>Lagerimporte</strong>
+              <span id="inventory-import-count">0</span>
             </div>
-            <div id="run-list" class="offer-list"></div>
+            <div id="inventory-import-list" class="offer-list"></div>
+          </section>
+
+          <section class="history-grid">
+            <section class="stack-panel">
+              <div class="panel-head compact">
+                <strong>Letzte Angebote</strong>
+                <span id="offer-count">0</span>
+              </div>
+              <div id="offer-list" class="offer-list"></div>
+            </section>
+
+            <section class="stack-panel">
+              <div class="panel-head compact">
+                <strong>Verarbeitungen</strong>
+                <span id="run-count">0</span>
+              </div>
+              <div id="run-list" class="offer-list"></div>
+            </section>
           </section>
         </section>
-      </details>
 
-      <section id="run-detail" class="run-detail" hidden>
-        <div class="panel-head">
-          <strong>Run Debug</strong>
-          <button id="run-detail-close" type="button" class="secondary">Schließen</button>
-        </div>
-        <div id="run-detail-body" class="run-detail-body"></div>
+        <section id="run-detail" class="run-detail" hidden>
+          <div class="panel-head">
+            <strong>Run Debug</strong>
+            <button id="run-detail-close" type="button" class="secondary">Schlie&szlig;en</button>
+          </div>
+          <div id="run-detail-body" class="run-detail-body"></div>
+        </section>
       </section>
     </main>
     <script src="/app.js"></script>

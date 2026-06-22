@@ -44,6 +44,8 @@ const productGroupsEl = document.querySelector('#product-groups');
 const addProductGroupButton = document.querySelector('#add-product-group');
 const priceRulesEl = document.querySelector('#price-rules');
 const addPriceRuleButton = document.querySelector('#add-price-rule');
+const navButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
+const panelViews = Array.from(document.querySelectorAll('.panel-view'));
 let currentSettings = {};
 
 document.querySelector('#save').addEventListener('click', save);
@@ -71,8 +73,18 @@ priceRulesEl.addEventListener('click', removePriceRule);
 loginForm.addEventListener('submit', login);
 form.addEventListener('input', () => schedulePreview());
 form.addEventListener('change', () => schedulePreview());
+navButtons.forEach((button) => button.addEventListener('click', () => activatePanel(button.dataset.panelTarget)));
 
 boot();
+
+function activatePanel(panelId) {
+  panelViews.forEach((panel) => {
+    panel.classList.toggle('active', panel.id === panelId);
+  });
+  navButtons.forEach((button) => {
+    button.classList.toggle('active', button.dataset.panelTarget === panelId);
+  });
+}
 
 async function boot() {
   hideLocalLoginInProduction();
