@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import readXlsxFile from 'read-excel-file/node';
-import { decodeCsvBuffer, parseCsvObjectsFromText } from './adapters/local-data.js';
+import { atomicWriteFile, decodeCsvBuffer, parseCsvObjectsFromText } from './adapters/local-data.js';
 import { validateInventoryCsv } from './core/csv-validator.js';
 import { loadTenant, saveTenant } from './storage.js';
 
@@ -88,7 +88,7 @@ export async function processInventoryImportMessage(message, settings, context, 
 
     const targetPath = settings.data?.lagerCsvPath || context.inventoryPath;
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(targetPath, csv, 'utf8');
+    await atomicWriteFile(targetPath, csv);
     await markInventoryConnected(context);
     return { ok: true, import: importRecord, validation, targetPath };
   } catch (error) {

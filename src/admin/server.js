@@ -17,7 +17,7 @@ import { isEduardInquiry } from '../workflow.js';
 import { processOfferRun, recordOwnerFeedback, setOfferRunStatus } from '../offer-run-service.js';
 import { deliverRunDraftToOwner } from '../owner-delivery.js';
 import { createMailRuntime } from '../mail-runtime.js';
-import { decodeCsvBuffer, fileExists, fileMetadata, readCsvObjects } from '../adapters/local-data.js';
+import { atomicWriteFile, decodeCsvBuffer, fileExists, fileMetadata, readCsvObjects } from '../adapters/local-data.js';
 import { validateInventoryCsv } from '../core/csv-validator.js';
 import { resolveTenantContextForInbound } from '../dealer-routing.js';
 import { isInternalOwnerDraft } from '../internal-mail.js';
@@ -642,7 +642,7 @@ export function createAdminApp(options = {}) {
 
     await fs.mkdir(path.dirname(path.resolve(target)), { recursive: true });
     const backupPath = await backupFileIfExists(target);
-    await fs.writeFile(target, csvText, 'utf8');
+    await atomicWriteFile(target, csvText);
     await saveSettings({ ...settings, data: { ...(settings.data || {}), preferLocalCsv: true } }, req.tenantContext);
     const tenant = await loadTenant(req.tenantContext);
     await saveTenant({

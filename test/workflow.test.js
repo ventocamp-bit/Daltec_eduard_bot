@@ -4,7 +4,7 @@ import { extractInquiry } from '../src/core/parser.js';
 import { calculateInquiryOffer, resolveProductCategory } from '../src/core/pricing.js';
 import { matchInventory, getTrailerType } from '../src/core/inventory.js';
 import { validateInventoryCsv } from '../src/core/csv-validator.js';
-import { decodeCsvBuffer, readCsvObjects } from '../src/adapters/local-data.js';
+import { atomicWriteFile, decodeCsvBuffer, readCsvObjects } from '../src/adapters/local-data.js';
 import { runWorkflow } from '../src/workflow.js';
 import { appendOfferRecord, getOnboardingChecklist, ingestInboundMessage, listOfferRecords, saveTenant } from '../src/storage.js';
 import { loadSettings, saveSettings } from '../src/settings.js';
@@ -520,6 +520,24 @@ test('reads Windows-1252 CSV exports without breaking German umlauts', async () 
   const rows = await readCsvObjects(file);
   assert.equal(rows[0]['Art.-Bez.'], 'Rückwärtskipper Größe Zubehör');
   assert.equal(decodeCsvBuffer(Buffer.from(csv, 'latin1')), csv);
+});
+
+test('atomic file write keeps original inventory when temp write fails before rename', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'eduard-atomic-write-'));
+  const file = path.join(dir, 'lager.csv');
+  await fs.writeFile(file, 'Art.-Nr.;Art.-Bez.;Lagermenge;Lagerwert\nOLD;Alt;1;1000\n', 'utf8');
+
+  await assert.rejects(
+    atomicWriteFile(file, 'Art.-Nr.;Art.-Bez.;Lagermenge;Lagerwert\nNEW;Neu;1;2000\n', {
+      writeFile: async () => {
+        throw new Error('simulated_mid_write_crash');
+      }
+    }),
+    /simulated_mid_write_crash/
+  );
+
+  assert.equal(await fs.readFile(file, 'utf8'), 'Art.-Nr.;Art.-Bez.;Lagermenge;Lagerwert\nOLD;Alt;1;1000\n');
+  assert.deepEqual((await fs.readdir(dir)).sort(), ['lager.csv']);
 });
 
 test('validates inventory CSV before upload can mark inventory connected', () => {

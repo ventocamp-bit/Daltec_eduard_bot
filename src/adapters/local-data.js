@@ -1,9 +1,28 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { TextDecoder } from 'node:util';
 
 export async function readCsvObjects(filePath) {
   const content = decodeCsvBuffer(await fs.readFile(filePath));
   return parseCsvObjectsFromText(content);
+}
+
+export async function atomicWriteFile(filePath, content, options = {}) {
+  const writer = options.writeFile || fs.writeFile;
+  const renamer = options.rename || fs.rename;
+  const unlinker = options.unlink || fs.unlink;
+  const encoding = options.encoding || 'utf8';
+  const target = path.resolve(filePath);
+  const tempPath = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.${crypto.randomUUID()}.tmp`);
+
+  try {
+    await writer(tempPath, content, encoding);
+    await renamer(tempPath, target);
+  } catch (error) {
+    await unlinker(tempPath).catch(() => null);
+    throw error;
+  }
 }
 
 export function decodeCsvBuffer(input) {
