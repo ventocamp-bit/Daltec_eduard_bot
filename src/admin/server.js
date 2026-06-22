@@ -926,8 +926,10 @@ function monitoringAlerts(metrics) {
 }
 
 export function findSuspectedDuplicateGroups(runs = []) {
+  const replayDuplicateIds = findReplayDuplicateIds(runs);
   const groups = new Map();
   for (const run of runs) {
+    if (replayDuplicateIds.has(run.id)) continue;
     const signature = duplicateSignature(run);
     if (!signature) continue;
     const group = groups.get(signature) || {
@@ -952,6 +954,37 @@ export function findSuspectedDuplicateGroups(runs = []) {
       providerMessageIds: [...new Set(group.providerMessageIds)],
       subjects: [...new Set(group.subjects)]
     }));
+}
+
+export function filterReplayDuplicateRuns(runs = []) {
+  const replayDuplicateIds = findReplayDuplicateIds(runs);
+  return runs.filter((run) => !replayDuplicateIds.has(run.id));
+}
+
+export function findReplayDuplicateIds(runs = []) {
+  const gmailProviderMessageIds = new Set(
+    runs
+      .filter((run) => runProvider(run) === 'gmail')
+      .map((run) => runProviderMessageId(run))
+      .filter(Boolean)
+  );
+  return new Set(
+    runs
+      .filter((run) => runProvider(run) === 'replay' && gmailProviderMessageIds.has(runProviderMessageId(run)))
+      .map((run) => run.id)
+      .filter(Boolean)
+  );
+}
+
+function runProvider(run) {
+  return String(run?.inbound_message?.provider || run?.provider || '')
+    .trim()
+    .toLowerCase();
+}
+
+function runProviderMessageId(run) {
+  return String(run?.inbound_message?.provider_message_id || run?.provider_message_id || '')
+    .trim();
 }
 
 function duplicateSignature(run) {
@@ -987,7 +1020,9 @@ async function buildSaasReadinessSnapshot(context) {
   const mailStatus = await getMailConnectionStatus(config, context);
   const runtime = await buildRuntimeReadiness({ config, settings, mailStatus });
   const proofTargetRuns = getProofTargetRuns();
-  const productionRuns = allRuns.filter((run) => run && !isMonitoringNoise(run, config, settings) && !isArchivedProofRun(run));
+  const productionRuns = filterReplayDuplicateRuns(
+    allRuns.filter((run) => run && !isMonitoringNoise(run, config, settings) && !isArchivedProofRun(run))
+  );
   const processedRuns = productionRuns.filter((run) => !['received', 'parsing', 'parsed', 'matching', 'pricing', 'drafting'].includes(run.status));
   const duplicateEvents = productionRuns.flatMap((run) => run.events || []).filter((event) => event.event_type === 'email_deduplicated');
   const suspectedDuplicateGroups = findSuspectedDuplicateGroups(productionRuns);

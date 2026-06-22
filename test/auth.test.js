@@ -3,7 +3,13 @@ import http from 'node:http';
 import test from 'node:test';
 import { createPasswordHash, verifyPassword } from '../src/auth.js';
 import { createAdminApp } from '../src/admin/server.js';
-import { findSuspectedDuplicateGroups, getProofTargetRuns, isArchivedProofRun } from '../src/admin/server.js';
+import {
+  filterReplayDuplicateRuns,
+  findReplayDuplicateIds,
+  findSuspectedDuplicateGroups,
+  getProofTargetRuns,
+  isArchivedProofRun
+} from '../src/admin/server.js';
 import { createFeedbackToken } from '../src/feedback-token.js';
 import { inspectRuntimeReadiness } from '../src/production-readiness.js';
 
@@ -80,6 +86,41 @@ test('monitoring detects suspected duplicate processed runs by customer and pric
   assert.equal(groups[0].customerEmail, 'ha1ka1h@aon.at');
   assert.equal(groups[0].extraRuns, 1);
   assert.deepEqual(groups[0].runIds, ['run-a', 'run-b']);
+});
+
+test('readiness ignores replay duplicates when a matching Gmail run exists', () => {
+  const baseRun = {
+    customer_json: { email: 'kunde@example.com' },
+    summary: { totalGross: 3190 },
+    status: 'sent_to_owner',
+    line_items_json: [
+      { produkt_name_original: 'Hochlader 3318 3500kg', preis_mail_brutto_num: 3190 }
+    ]
+  };
+  const gmailRun = {
+    ...baseRun,
+    id: 'gmail-run',
+    inbound_message: {
+      provider: 'gmail',
+      provider_message_id: 'gmail-message-1',
+      subject: 'WG: Neuer Lead'
+    }
+  };
+  const replayRun = {
+    ...baseRun,
+    id: 'replay-run',
+    inbound_message: {
+      provider: 'replay',
+      provider_message_id: 'gmail-message-1',
+      subject: 'WG: Neuer Lead'
+    }
+  };
+
+  const runs = [gmailRun, replayRun];
+
+  assert.deepEqual([...findReplayDuplicateIds(runs)], ['replay-run']);
+  assert.deepEqual(filterReplayDuplicateRuns(runs).map((run) => run.id), ['gmail-run']);
+  assert.equal(findSuspectedDuplicateGroups(runs).length, 0);
 });
 
 test('readiness archives ignored proof runs', () => {
