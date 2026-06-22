@@ -1,10 +1,29 @@
 import { parseEuroNumber, stripHtml } from './format.js';
 
+const FIELD_MAP = {
+  vorname: ['vorname', 'jméno', 'jmÃ©no', 'naam', 'prénom', 'voornaam', 'first name', 'nome', 'imię'],
+  nachname: ['nachname', 'příjmení', 'pÅ™Ã­jmenÃ­', 'achternaam', 'nom', 'familienaam', 'last name', 'cognome', 'nazwisko'],
+  email: ['e-mail-adresse', 'emailová adresa', 'emailovÃ¡ adresa', 'e-mailadres', 'adresse e-mail', 'email address', 'adres e-mail', 'indirizzo e-mail'],
+  telefon: ['telefonnummer', 'telefonní číslo', 'telefonnÃ­ ÄÃ­slo', 'telefoonnummer', 'numéro de téléphone', 'phone number', 'numer telefonu', 'numero di telefono'],
+  adresse: ['adresse', 'adresa', 'adres', 'address', 'indirizzo']
+};
+
+FIELD_MAP.vorname.push('jm\u00e9no', 'voornaam', 'pr\u00e9nom', 'imi\u0119', 'first name', 'nome');
+FIELD_MAP.nachname.push('p\u0159\u00edjmen\u00ed', 'achternaam', 'familienaam', 'nom', 'nazwisko', 'last name', 'cognome');
+FIELD_MAP.email.push('emailov\u00e1 adresa', 'e-mailadres', 'adresse e-mail', 'adres e-mail', 'email address', 'indirizzo e-mail');
+FIELD_MAP.telefon.push('telefonn\u00ed \u010d\u00edslo', 'telefoonnummer', 'num\u00e9ro de t\u00e9l\u00e9phone', 'numer telefonu', 'phone number', 'numero di telefono');
+FIELD_MAP.adresse.push('adresa', 'adres', 'adresse', 'address', 'indirizzo');
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 const STOP_LABELS = /^(Preis|MwSt|Preis inkl\. MwSt|Gesamt|Fragen|Bemerkungen|Konfiguration|Cena|DPH|Cena vč\. DPH|Nastavení|Otázky\/Připomínky\?)$/i;
 
 function extractTableValue(html, label) {
+  const escapedLabel = escapeRegex(label);
   const regex = new RegExp(
-    `<td[^>]*>\\s*<strong[^>]*>\\s*${label}\\s*<\\/strong>\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
+    `<td[^>]*>\\s*<strong[^>]*>\\s*${escapedLabel}\\s*<\\/strong>\\s*<\\/td>\\s*<td[^>]*>([\\s\\S]*?)<\\/td>`,
     'i'
   );
   const match = String(html || '').match(regex);
@@ -12,7 +31,8 @@ function extractTableValue(html, label) {
 }
 
 function extractPlainValue(text, label) {
-  const regex = new RegExp(`${label}\\s*(?:\\n|\\r\\n|\\s{2,})([^\\n\\r]+)`, 'i');
+  const escapedLabel = escapeRegex(label);
+  const regex = new RegExp(`(?:^|\\r?\\n)\\s*${escapedLabel}\\s*(?:\\r?\\n|\\s{2,})([^\\n\\r]+)`, 'i');
   const match = String(text || '').match(regex);
   return match ? match[1].trim() : '';
 }
@@ -37,6 +57,12 @@ export function extractInquiry(raw = {}) {
 
   const emailRaw = extractAnyValue(html, text, ['E-mail-Adresse', 'Emailová adresa']) || '';
   const emailMatch = emailRaw.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+  const mappedVorname = extractAnyValue(html, text, FIELD_MAP.vorname) || vorname;
+  const mappedNachname = extractAnyValue(html, text, FIELD_MAP.nachname) || nachname;
+  const mappedAdresse = extractAnyValue(html, text, FIELD_MAP.adresse) || adresse;
+  const mappedTelefon = extractAnyValue(html, text, FIELD_MAP.telefon) || telefon;
+  const mappedEmailRaw = extractAnyValue(html, text, FIELD_MAP.email) || emailRaw;
+  const mappedEmailMatch = mappedEmailRaw.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
 
   const lineItems = [];
   const rowRegex = /<tr[\s\S]*?<\/tr>/gi;
@@ -114,11 +140,11 @@ export function extractInquiry(raw = {}) {
   }
 
   return {
-    kunde_vorname: vorname,
-    kunde_nachname: nachname,
-    kunde_email: emailMatch ? emailMatch[1] : 'keine@email.com',
-    kunde_adresse: adresse,
-    kunde_telefon: telefon,
+    kunde_vorname: mappedVorname,
+    kunde_nachname: mappedNachname,
+    kunde_email: mappedEmailMatch ? mappedEmailMatch[1] : 'keine@email.com',
+    kunde_adresse: mappedAdresse,
+    kunde_telefon: mappedTelefon,
     line_items: lineItems
   };
 }

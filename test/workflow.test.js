@@ -69,6 +69,126 @@ test('extracts Czech Eduard inquiries without treating CZK as Euro', () => {
   assert.equal(result.line_items[0].preis_mail_brutto_num, 0);
 });
 
+test('extracts multilingual customer labels from Eduard inquiries', () => {
+  const czech = extractInquiry({
+    text: [
+      'jméno',
+      'Václav',
+      'příjmení',
+      'Běhunčík',
+      'emailová adresa',
+      'vaclav.behuncik@example.cz',
+      'telefonní číslo',
+      '+420736744484',
+      'Hochlader 3318 3500kg € 3.000,00'
+    ].join('\n')
+  });
+
+  const german = extractInquiry({
+    text: [
+      'Vorname',
+      'Max',
+      'Nachname',
+      'Mustermann',
+      'E-mail-Adresse',
+      'max@example.com',
+      'Telefonnummer',
+      '+431234567',
+      'Hochlader 3318 3500kg € 3.000,00'
+    ].join('\n')
+  });
+
+  const dutch = extractInquiry({
+    text: [
+      'naam',
+      'Jan',
+      'achternaam',
+      'Jansen',
+      'e-mailadres',
+      'jan.jansen@example.nl',
+      'telefoonnummer',
+      '+31201234567',
+      'Hochlader 3318 3500kg € 3.000,00'
+    ].join('\n')
+  });
+
+  assert.equal(czech.kunde_vorname, 'Václav');
+  assert.equal(czech.kunde_nachname, 'Běhunčík');
+  assert.equal(czech.kunde_email, 'vaclav.behuncik@example.cz');
+  assert.equal(czech.kunde_telefon, '+420736744484');
+  assert.equal(german.kunde_vorname, 'Max');
+  assert.equal(german.kunde_nachname, 'Mustermann');
+  assert.equal(german.kunde_email, 'max@example.com');
+  assert.equal(dutch.kunde_vorname, 'Jan');
+  assert.equal(dutch.kunde_nachname, 'Jansen');
+  assert.equal(dutch.kunde_email, 'jan.jansen@example.nl');
+});
+
+test('extracts DE CZ NL FR PL EN IT customer labels from Eduard inquiries', () => {
+  const fixtures = [
+    {
+      language: 'DE',
+      labels: ['Vorname', 'Nachname', 'E-mail-Adresse', 'Telefonnummer', 'Adresse'],
+      expected: ['Max', 'Mustermann', 'max@example.de', '+431234567', 'Hauptstrasse 1, Wien']
+    },
+    {
+      language: 'CZ',
+      labels: ['Jm\u00e9no', 'P\u0159\u00edjmen\u00ed', 'Emailov\u00e1 adresa', 'Telefonn\u00ed \u010d\u00edslo', 'Adresa'],
+      expected: ['Vaclav', 'Behuncik', 'vaclav.behuncik@example.cz', '+420736744484', 'Dlouha 1, Praha']
+    },
+    {
+      language: 'NL',
+      labels: ['Voornaam', 'Achternaam', 'E-mailadres', 'Telefoonnummer', 'Adres'],
+      expected: ['Jan', 'Jansen', 'jan.jansen@example.nl', '+31201234567', 'Damrak 1, Amsterdam']
+    },
+    {
+      language: 'FR',
+      labels: ['Pr\u00e9nom', 'Nom', 'Adresse e-mail', 'Num\u00e9ro de t\u00e9l\u00e9phone', 'Adresse'],
+      expected: ['Jean', 'Dupont', 'jean.dupont@example.fr', '+33123456789', 'Rue de Paris 1, Paris']
+    },
+    {
+      language: 'PL',
+      labels: ['Imi\u0119', 'Nazwisko', 'Adres e-mail', 'Numer telefonu', 'Adres'],
+      expected: ['Jan', 'Kowalski', 'jan.kowalski@example.pl', '+48123456789', 'Dluga 1, Warszawa']
+    },
+    {
+      language: 'EN',
+      labels: ['First name', 'Last name', 'Email address', 'Phone number', 'Address'],
+      expected: ['John', 'Smith', 'john.smith@example.com', '+441234567890', 'High Street 1, London']
+    },
+    {
+      language: 'IT',
+      labels: ['Nome', 'Cognome', 'Indirizzo e-mail', 'Numero di telefono', 'Indirizzo'],
+      expected: ['Mario', 'Rossi', 'mario.rossi@example.it', '+391234567890', 'Via Roma 1, Milano']
+    }
+  ];
+
+  for (const fixture of fixtures) {
+    const [firstName, lastName, email, phone, address] = fixture.expected;
+    const result = extractInquiry({
+      text: [
+        fixture.labels[0],
+        firstName,
+        fixture.labels[1],
+        lastName,
+        fixture.labels[2],
+        email,
+        fixture.labels[3],
+        phone,
+        fixture.labels[4],
+        address,
+        'Hochlader 3318 3500kg â‚¬ 3.000,00'
+      ].join('\n')
+    });
+
+    assert.equal(result.kunde_vorname, firstName, fixture.language);
+    assert.equal(result.kunde_nachname, lastName, fixture.language);
+    assert.equal(result.kunde_email, email, fixture.language);
+    assert.equal(result.kunde_telefon, phone, fixture.language);
+    assert.equal(result.kunde_adresse, address, fixture.language);
+  }
+});
+
 test('extracts Eduard SKU NOT FOUND information requests as reviewable line items', () => {
   const result = extractInquiry({
     text: [
