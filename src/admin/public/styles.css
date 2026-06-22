@@ -194,7 +194,7 @@ p {
   align-items: start;
   display: grid;
   gap: 14px;
-  grid-template-columns: minmax(560px, 1.08fr) minmax(360px, 0.92fr);
+  grid-template-columns: minmax(340px, 0.58fr) minmax(620px, 1.42fr);
 }
 
 .content-shell.diagnostics-active .workbench {
