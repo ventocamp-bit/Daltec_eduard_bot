@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import http from 'node:http';
+import path from 'node:path';
 import test from 'node:test';
 import { createPasswordHash, verifyPassword } from '../src/auth.js';
 import { createAdminApp } from '../src/admin/server.js';
@@ -189,6 +191,104 @@ test('admin tenant is selected from host header', async () => {
     assert.equal(proof.status, 200);
   } finally {
     server.close();
+  }
+});
+
+test('microsoft oauth start redirects and callback stores tenant token', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const sessionSecret = 'microsoft-session-secret';
+  const previousEnv = {
+    MICROSOFT_CLIENT_ID: process.env.MICROSOFT_CLIENT_ID,
+    MICROSOFT_CLIENT_SECRET: process.env.MICROSOFT_CLIENT_SECRET,
+    MICROSOFT_REDIRECT_URI: process.env.MICROSOFT_REDIRECT_URI,
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    TENANT_HOST_MAP: process.env.TENANT_HOST_MAP
+  };
+  const tenantId = `ms-oauth-${Date.now()}`;
+  process.env.MICROSOFT_CLIENT_ID = 'ms-client-id';
+  process.env.MICROSOFT_CLIENT_SECRET = 'ms-client-secret';
+  process.env.MICROSOFT_REDIRECT_URI = 'http://127.0.0.1:3030/api/oauth/microsoft/callback';
+  process.env.APP_BASE_URL = 'http://127.0.0.1:3030';
+  process.env.TENANT_HOST_MAP = `oauth.example.at=${tenantId}`;
+
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret,
+      cookieName: 'ms_session',
+      secureCookie: false
+    },
+    microsoftOAuth: {
+      exchangeCode: async (config, code) => {
+        if (code !== 'valid-code') {
+          const error = new Error('microsoft_token_failed: invalid_grant');
+          error.statusCode = 400;
+          throw error;
+        }
+        assert.equal(config.microsoft.redirectUri, 'http://127.0.0.1:3030/api/oauth/microsoft/callback');
+        return {
+          access_token: 'access-token',
+          refresh_token: 'refresh-token',
+          expires_in: 3600,
+          token_type: 'Bearer'
+        };
+      },
+      fetchProfile: async (token) => {
+        assert.equal(token.access_token, 'access-token');
+        return { email: 'owner@example.com' };
+      }
+    }
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-Host': 'oauth.example.at' },
+      body: JSON.stringify({ email: 'owner@example.com', password: 'secret-pass' })
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie');
+
+    const start = await fetch(`${baseUrl}/api/oauth/microsoft/start`, {
+      redirect: 'manual',
+      headers: { Cookie: cookie, 'X-Forwarded-Host': 'oauth.example.at' }
+    });
+    assert.equal(start.status, 302);
+    const location = start.headers.get('location');
+    assert.match(location, /^https:\/\/login\.microsoftonline\.com\/common\/oauth2\/v2\.0\/authorize\?/);
+    const authUrl = new URL(location);
+    assert.equal(authUrl.searchParams.get('client_id'), 'ms-client-id');
+    assert.equal(authUrl.searchParams.get('redirect_uri'), 'http://127.0.0.1:3030/api/oauth/microsoft/callback');
+    assert.deepEqual(authUrl.searchParams.get('scope').split(' ').sort(), ['Mail.Read', 'Mail.Send', 'offline_access'].sort());
+
+    const callback = await fetch(`${baseUrl}/api/oauth/microsoft/callback?code=valid-code&state=${encodeURIComponent(authUrl.searchParams.get('state'))}`, {
+      redirect: 'manual',
+      headers: { Cookie: cookie, 'X-Forwarded-Host': 'oauth.example.at' }
+    });
+    assert.equal(callback.status, 302);
+    assert.equal(callback.headers.get('location'), '/?mail_connected=outlook');
+
+    const storedPath = path.join('data', 'tenants', tenantId, 'mail-connections.json');
+    const stored = JSON.parse(await fs.readFile(storedPath, 'utf8'));
+    assert.equal(stored.outlook.token.refresh_token, 'refresh-token');
+    assert.equal(stored.outlook.profile.email, 'owner@example.com');
+
+    const bad = await fetch(`${baseUrl}/api/oauth/microsoft/callback?code=bad-code&state=${encodeURIComponent(authUrl.searchParams.get('state'))}`, {
+      headers: { Cookie: cookie, 'X-Forwarded-Host': 'oauth.example.at' }
+    });
+    assert.equal(bad.status, 400);
+    assert.match(await bad.text(), /microsoft_token_failed/);
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await fs.rm(path.join('data', 'tenants', tenantId), { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 

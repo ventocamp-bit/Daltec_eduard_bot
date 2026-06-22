@@ -18,6 +18,7 @@ export function loadConfig(env = process.env) {
     microsoft: {
       clientId: env.MICROSOFT_CLIENT_ID || '',
       clientSecret: env.MICROSOFT_CLIENT_SECRET || '',
+      redirectUri: env.MICROSOFT_REDIRECT_URI || '',
       tenant: env.MICROSOFT_TENANT || 'common'
     }
   };

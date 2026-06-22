@@ -1,4 +1,5 @@
 import { loadMailConnections, saveMailConnection } from '../mail-connections.js';
+import { MICROSOFT_SCOPES, MICROSOFT_TOKEN_URL } from '../core/microsoft-oauth.js';
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
 
@@ -89,15 +90,10 @@ async function refreshMicrosoftTokenIfNeeded(config, context, connection) {
     client_secret: config.microsoft.clientSecret,
     grant_type: 'refresh_token',
     refresh_token: token.refresh_token,
-    scope: [
-      'offline_access',
-      'User.Read',
-      'https://graph.microsoft.com/Mail.ReadWrite',
-      'https://graph.microsoft.com/Mail.Send'
-    ].join(' ')
+    scope: MICROSOFT_SCOPES.join(' ')
   });
 
-  const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(config.microsoft.tenant)}/oauth2/v2.0/token`, {
+  const response = await fetch(MICROSOFT_TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body

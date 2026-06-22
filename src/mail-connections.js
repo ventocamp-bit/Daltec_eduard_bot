@@ -2,18 +2,16 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { google } from 'googleapis';
+import {
+  createMicrosoftAuthorizationUrl,
+  exchangeMicrosoftCode,
+  fetchMicrosoftProfile
+} from './core/microsoft-oauth.js';
 import { tenantContext } from './tenant-context.js';
 
 const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/gmail.send'
-];
-
-const MICROSOFT_SCOPES = [
-  'offline_access',
-  'User.Read',
-  'https://graph.microsoft.com/Mail.ReadWrite',
-  'https://graph.microsoft.com/Mail.Send'
 ];
 
 export async function getMailConnectionStatus(config, context = {}) {
@@ -71,53 +69,20 @@ export async function completeGoogleConnect(config, code, state, stateSecret = '
 }
 
 export function createMicrosoftConnectUrl(config, context = {}, stateSecret = '') {
-  if (!config.microsoft.clientId || !config.microsoft.clientSecret) {
-    const error = new Error('microsoft_oauth_not_configured');
-    error.statusCode = 400;
-    throw error;
-  }
-  const params = new URLSearchParams({
-    client_id: config.microsoft.clientId,
-    response_type: 'code',
-    redirect_uri: `${config.app.baseUrl}/api/oauth/microsoft/callback`,
-    response_mode: 'query',
-    scope: MICROSOFT_SCOPES.join(' '),
-    state: signState({ provider: 'outlook', tenantId: getPaths(context).tenantId }, stateSecret)
-  });
-  return `https://login.microsoftonline.com/${encodeURIComponent(config.microsoft.tenant)}/oauth2/v2.0/authorize?${params}`;
+  return createMicrosoftAuthorizationUrl(
+    config,
+    signState({ provider: 'outlook', tenantId: getPaths(context).tenantId }, stateSecret)
+  );
 }
 
-export async function completeMicrosoftConnect(config, code, state, stateSecret = '') {
+export async function completeMicrosoftConnect(config, code, state, stateSecret = '', options = {}) {
   const parsed = verifyState(state, stateSecret, 'outlook');
-  const redirectUri = `${config.app.baseUrl}/api/oauth/microsoft/callback`;
-  const body = new URLSearchParams({
-    client_id: config.microsoft.clientId,
-    client_secret: config.microsoft.clientSecret,
-    grant_type: 'authorization_code',
-    code,
-    redirect_uri: redirectUri,
-    scope: MICROSOFT_SCOPES.join(' ')
-  });
-  const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(config.microsoft.tenant)}/oauth2/v2.0/token`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body
-  });
-  if (!response.ok) {
-    const error = new Error(`microsoft_token_failed: ${await response.text()}`);
-    error.statusCode = 400;
-    throw error;
-  }
-  const token = await response.json();
-  token.expiresAt = Date.now() + Number(token.expires_in || 3600) * 1000;
-  const profile = await fetch('https://graph.microsoft.com/v1.0/me', {
-    headers: { authorization: `Bearer ${token.access_token}` }
-  }).then((res) => res.ok ? res.json() : {}).then((data) => ({
-    email: data.mail || data.userPrincipalName || null
-  })).catch(() => ({}));
-  const paths = getPaths({ tenantId: parsed.tenantId });
+  const token = await (options.exchangeCode || exchangeMicrosoftCode)(config, code);
+  const profile = await (options.fetchProfile || fetchMicrosoftProfile)(token);
+  const tenantId = options.tenantId || parsed.tenantId;
+  const paths = getPaths({ tenantId });
   await saveMailConnection(paths, 'outlook', { token, profile });
-  return { tenantId: parsed.tenantId, profile };
+  return { tenantId, profile };
 }
 
 export async function loadMailConnections(context = {}) {

@@ -96,6 +96,7 @@ export function createAdminApp(options = {}) {
   const app = express();
   const auth = options.auth || authConfig();
   const gmailProofAnalyzer = options.gmailProofAnalyzer || buildGmailProofAnalysis;
+  const microsoftOAuth = options.microsoftOAuth || {};
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false }));
@@ -292,7 +293,12 @@ export function createAdminApp(options = {}) {
 
   app.get('/api/oauth/microsoft/callback', async (req, res, next) => {
   try {
-    await completeMicrosoftConnect(loadConfig(), req.query.code, req.query.state, auth.sessionSecret);
+    const token = parseCookies(req.headers.cookie)[auth.cookieName];
+    const session = getSession(token, auth);
+    await completeMicrosoftConnect(loadConfig(), req.query.code, req.query.state, auth.sessionSecret, {
+      ...microsoftOAuth,
+      tenantId: session?.tenantId || requestTenantId(req, auth)
+    });
     res.redirect('/?mail_connected=outlook');
   } catch (error) {
     next(error);
