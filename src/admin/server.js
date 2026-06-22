@@ -968,9 +968,21 @@ export function findReplayDuplicateIds(runs = []) {
       .map((run) => runProviderMessageId(run))
       .filter(Boolean)
   );
+  const gmailSignatures = new Set(
+    runs
+      .filter((run) => runProvider(run) === 'gmail')
+      .map((run) => duplicateSignature(run))
+      .filter(Boolean)
+  );
   return new Set(
     runs
-      .filter((run) => runProvider(run) === 'replay' && gmailProviderMessageIds.has(runProviderMessageId(run)))
+      .filter((run) =>
+        runProvider(run) === 'replay' &&
+        (
+          gmailProviderMessageIds.has(runProviderMessageId(run)) ||
+          gmailSignatures.has(duplicateSignature(run))
+        )
+      )
       .map((run) => run.id)
       .filter(Boolean)
   );

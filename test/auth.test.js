@@ -115,10 +115,19 @@ test('readiness ignores replay duplicates when a matching Gmail run exists', () 
       subject: 'WG: Neuer Lead'
     }
   };
+  const replayRunWithDifferentMessageId = {
+    ...baseRun,
+    id: 'replay-run-different-message',
+    inbound_message: {
+      provider: 'replay',
+      provider_message_id: 'gmail-message-2',
+      subject: 'WG: Neuer Lead'
+    }
+  };
 
-  const runs = [gmailRun, replayRun];
+  const runs = [gmailRun, replayRun, replayRunWithDifferentMessageId];
 
-  assert.deepEqual([...findReplayDuplicateIds(runs)], ['replay-run']);
+  assert.deepEqual([...findReplayDuplicateIds(runs)], ['replay-run', 'replay-run-different-message']);
   assert.deepEqual(filterReplayDuplicateRuns(runs).map((run) => run.id), ['gmail-run']);
   assert.equal(findSuspectedDuplicateGroups(runs).length, 0);
 });
