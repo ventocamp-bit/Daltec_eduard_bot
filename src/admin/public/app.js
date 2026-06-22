@@ -1,3 +1,5 @@
+import { buildEditedDraftHtml } from './draft-review.js';
+
 const form = document.querySelector('#settings-form');
 const appView = document.querySelector('#app-view');
 const loginView = document.querySelector('#login-view');
@@ -699,60 +701,194 @@ async function openRunFromList(event) {
 }
 
 async function renderRunDetail(runId) {
-  setStatus('Lade Run Debug...');
+  setStatus('Lade Draft Review...');
   const run = await request(`/api/offer-runs/${encodeURIComponent(runId)}`);
   runDetailBodyEl.innerHTML = runDetailHtml(run);
   runDetailEl.hidden = false;
   runDetailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const draftFrame = runDetailBodyEl.querySelector('[data-draft-frame]');
-  if (draftFrame) draftFrame.srcdoc = run.draft?.html_body || run.draft_html || '';
-  runDetailBodyEl.querySelectorAll('[data-feedback]').forEach((button) => {
-    button.addEventListener('click', () => submitOwnerFeedback(run.id, button.dataset.feedback));
-  });
-  setStatus('Run Debug geladen');
+  const form = runDetailBodyEl.querySelector('[data-draft-review-form]');
+  form?.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
+  runDetailBodyEl.querySelector('[data-reject-draft]')?.addEventListener('click', () => rejectDraft(run.id));
+  setStatus('Draft Review geladen');
 }
 
 function runDetailHtml(run) {
-  const feedback = run.owner_feedback || run.summary?.ownerFeedback || null;
+  const draft = draftReviewState(run);
   return `
-    <div class="debug-summary">
-      ${debugMetric('Status', run.status)}
-      ${debugMetric('Fehler', [run.error_code, run.error_message].filter(Boolean).join(': ') || 'kein Fehler')}
-      ${debugMetric('Kunde', run.summary?.customerName || run.summary?.customerEmail || '-')}
-      ${debugMetric('Summe', formatMoney(run.summary?.totalGross))}
-      ${debugMetric('Match', `${run.summary?.matchType || '-'} / ${Math.round(Number(run.summary?.matchConfidence || 0) * 100)}%`)}
-      ${debugMetric('Feedback', feedback ? feedbackLabel(feedback.rating) : 'offen')}
-    </div>
-
-    <div class="feedback-panel">
-      <strong>Owner Feedback</strong>
-      <div class="button-row">
-        <button type="button" data-feedback="sendable">Sendbar</button>
-        <button type="button" class="secondary" data-feedback="minor_correction">Kleine Korrektur nötig</button>
-        <button type="button" class="danger" data-feedback="wrong">Falsch</button>
+    <form class="draft-review" data-draft-review-form>
+      <div class="draft-review-head">
+        <div>
+          <p class="eyebrow">Draft Review</p>
+          <h2>${escapeHtml(draft.customerName || 'Kundenangebot')}</h2>
+        </div>
+        <span class="run-status ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>
       </div>
-      <label>Notiz <input data-feedback-notes type="text" placeholder="z.B. Preis falsch, Match falsch, Text ok"></label>
-      <small>${feedback ? `Gespeichert: ${escapeHtml(feedbackLabel(feedback.rating))} ${escapeHtml(feedback.notes || '')}` : 'Noch keine Bewertung gespeichert.'}</small>
-    </div>
 
-    <div class="debug-grid">
-      ${debugBlock('Input Snapshot', run.inbound_message)}
-      ${debugBlock('Config Snapshot', run.config_snapshot)}
-      ${debugBlock('Parsed Customer', run.customer_json)}
-      ${debugBlock('Line Items', run.line_items_json)}
-      ${debugBlock('Pricing Snapshot', run.pricing_json)}
-      ${debugBlock('Match Snapshot', run.match_json)}
-      ${debugBlock('Events', run.events)}
-    </div>
-
-    <div class="debug-draft">
-      <div class="panel-head compact">
-        <strong>Draft Snapshot</strong>
-        <span>${escapeHtml(run.draft?.subject || run.draft_subject || '')}</span>
+      <div class="inline two">
+        <label>An <input data-draft-field="to" type="email" value="${escapeHtml(draft.to)}" required></label>
+        <label>Betreff <input data-draft-field="subject" type="text" value="${escapeHtml(draft.subject)}" required></label>
       </div>
-      <iframe data-draft-frame title="Run Draft"></iframe>
+
+      <section class="draft-section">
+        <strong>Anrede & Intro</strong>
+        <textarea data-draft-field="intro" rows="5">${escapeHtml(draft.intro)}</textarea>
+      </section>
+
+      <section class="draft-section">
+        <strong>Preistabelle</strong>
+        <div class="editable-price-table" data-draft-table>
+          <div class="editable-price-row editable-price-header">
+            <span>Produkt</span><span>UVP</span><span>Rabatt</span><span>Angebot</span>
+          </div>
+          ${draft.rows.map((row) => draftPriceRowHtml(row)).join('')}
+        </div>
+      </section>
+
+      <section class="draft-section">
+        <strong>Hinweise</strong>
+        <textarea data-draft-field="notes" rows="4">${escapeHtml(draft.notes)}</textarea>
+      </section>
+
+      <section class="draft-section">
+        <strong>Signatur</strong>
+        <textarea data-draft-field="signature" rows="5">${escapeHtml(draft.signature)}</textarea>
+      </section>
+
+      <div class="draft-message" data-draft-message hidden></div>
+      <div class="draft-actions">
+        <button type="button" class="danger" data-reject-draft>✗ Ablehnen</button>
+        <button type="submit" data-send-draft>✓ Mail senden</button>
+      </div>
+    </form>
+  `;
+}
+
+function draftPriceRowHtml(row) {
+  return `
+    <div class="editable-price-row ${escapeHtml(row.type || '')}" data-price-row data-row-type="${escapeHtml(row.type || '')}">
+      <input data-price-field="product" type="text" value="${escapeHtml(row.product)}">
+      <input data-price-field="uvp" type="text" value="${escapeHtml(row.uvp)}">
+      <input data-price-field="discount" type="text" value="${escapeHtml(row.discount)}">
+      <input data-price-field="offer" type="text" value="${escapeHtml(row.offer)}">
     </div>
   `;
+}
+
+function draftReviewState(run) {
+  const customer = run.customer_json || {};
+  const pricing = run.pricing_json || {};
+  const customerName = run.summary?.customerName || [customer.first_name, customer.last_name].filter(Boolean).join(' ');
+  const to = run.draft?.customer_email || run.summary?.customerEmail || customer.email || '';
+  const subject = run.draft?.subject || run.draft_subject || `Ihr Eduard Angebot${customerName ? ` - ${customerName}` : ''}`;
+  const paragraphs = draftParagraphs(run.draft?.html_body || run.draft_html || '');
+  return {
+    customerName,
+    to,
+    subject,
+    intro: paragraphs[0] || defaultIntro(customerName),
+    rows: draftRows(run),
+    notes: run.error_message || '',
+    signature: paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})
+  };
+}
+
+function draftParagraphs(html) {
+  if (!html) return [];
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  return Array.from(doc.querySelectorAll('p'))
+    .map((node) => node.textContent.trim())
+    .filter(Boolean);
+}
+
+function defaultIntro(customerName) {
+  return customerName
+    ? `Sehr geehrte/r ${customerName},\n\nvielen Dank für Ihre Anfrage. Gerne bieten wir Ihnen folgendes Fahrzeug an.`
+    : 'Sehr geehrte Damen und Herren,\n\nvielen Dank für Ihre Anfrage. Gerne bieten wir Ihnen folgendes Fahrzeug an.';
+}
+
+function defaultSignature(settings = {}) {
+  const signature = settings.signature || {};
+  return [
+    signature.greeting || 'Beste Grüße',
+    signature.name || '',
+    signature.company || '',
+    signature.phone || '',
+    signature.email || ''
+  ].filter(Boolean).join('\n');
+}
+
+function draftRows(run) {
+  const pricing = run.pricing_json || {};
+  const items = Array.isArray(run.line_items_json) ? run.line_items_json : [];
+  const rows = items.map((item) => ({
+    product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
+    uvp: formatMoney(item.preis_mail_brutto_num || item.price || 0),
+    discount: '',
+    offer: formatMoney(item.preis_mail_brutto_num || item.price || 0),
+    type: ''
+  }));
+  rows.push(
+    { product: 'Gesamt netto', uvp: formatMoney(pricing.gesamt_uvp_netto || pricing.totalUvpNet || 0), discount: formatMoney(pricing.gesamt_rabatt_netto || 0), offer: formatMoney(pricing.gesamt_angebot_netto || 0), type: 'total' },
+    { product: '20% MwSt', uvp: '', discount: '', offer: formatMoney(pricing.mwst_betrag || pricing.vat_amount || 0), type: 'total' },
+    { product: 'Gesamt brutto', uvp: formatMoney(pricing.gesamt_uvp_brutto || pricing.uvpGross || 0), discount: formatMoney(pricing.gesamt_rabatt_brutto || 0), offer: formatMoney(pricing.gesamt_angebot_brutto || run.summary?.totalGross || 0), type: 'gross' }
+  );
+  return rows;
+}
+
+async function sendEditedDraft(event, runId) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector('[data-send-draft]');
+  const message = form.querySelector('[data-draft-message]');
+  button.disabled = true;
+  button.textContent = 'Sendet...';
+  message.hidden = true;
+  try {
+    const payload = buildEditedDraftPayload(form);
+    const result = await request(`/api/offer-runs/${encodeURIComponent(runId)}/send-to-customer`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    form.querySelectorAll('input, textarea, button').forEach((element) => {
+      element.disabled = true;
+    });
+    message.hidden = false;
+    message.className = 'draft-message ok';
+    message.textContent = `Mail gesendet: ${new Date(result.sent_at).toLocaleString('de-AT')}`;
+    await refreshRuns();
+    await refreshReviewQueue();
+    await refreshMonitoring();
+    await refreshSaasReadiness();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = '✓ Mail senden';
+    message.hidden = false;
+    message.className = 'draft-message error';
+    message.textContent = error.message;
+  }
+}
+
+async function rejectDraft(runId) {
+  await submitOwnerFeedback(runId, 'rejected', { renderDetail: false });
+  runDetailEl.hidden = true;
+}
+
+function buildEditedDraftPayload(form) {
+  const to = form.querySelector('[data-draft-field="to"]').value.trim();
+  const subject = form.querySelector('[data-draft-field="subject"]').value.trim();
+  const html = buildEditedDraftHtml({
+    intro: form.querySelector('[data-draft-field="intro"]').value,
+    rows: Array.from(form.querySelectorAll('[data-price-row]')).map((row) => ({
+      type: row.dataset.rowType || '',
+      product: row.querySelector('[data-price-field="product"]').value,
+      uvp: row.querySelector('[data-price-field="uvp"]').value,
+      discount: row.querySelector('[data-price-field="discount"]').value,
+      offer: row.querySelector('[data-price-field="offer"]').value
+    })),
+    notes: form.querySelector('[data-draft-field="notes"]').value,
+    signature: form.querySelector('[data-draft-field="signature"]').value
+  });
+  return { to, subject, html };
 }
 
 function debugMetric(label, value) {
@@ -772,7 +908,8 @@ function feedbackLabel(rating) {
   return {
     sendable: 'Sendbar',
     minor_correction: 'Kleine Korrektur nötig',
-    wrong: 'Falsch'
+    wrong: 'Falsch',
+    rejected: 'Abgelehnt'
   }[rating] || rating || '-';
 }
 

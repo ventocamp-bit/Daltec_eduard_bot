@@ -813,6 +813,122 @@ iframe {
   padding: 12px;
 }
 
+.draft-review {
+  display: grid;
+  gap: 16px;
+}
+
+.draft-review-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.draft-review h2 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.draft-section {
+  display: grid;
+  gap: 8px;
+}
+
+.draft-section > strong {
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  padding-top: 12px;
+}
+
+.draft-review textarea {
+  border: 1px solid #cfd6df;
+  border-radius: 6px;
+  font: inherit;
+  line-height: 1.45;
+  min-height: 94px;
+  padding: 9px;
+  resize: vertical;
+  width: 100%;
+}
+
+.editable-price-table {
+  border: 1px solid #000;
+  display: grid;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  overflow-x: auto;
+}
+
+.editable-price-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(110px, 0.75fr));
+}
+
+.editable-price-row > span,
+.editable-price-row > input {
+  border: 0;
+  border-right: 1px solid #000;
+  border-bottom: 1px solid #000;
+  border-radius: 0;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  min-height: 36px;
+  padding: 7px;
+}
+
+.editable-price-row > :last-child {
+  border-right: 0;
+}
+
+.editable-price-header {
+  background: #FFC000;
+  color: #000;
+  font-weight: 700;
+}
+
+.editable-price-row input[data-price-field="discount"] {
+  color: #c00000;
+  font-weight: 700;
+}
+
+.editable-price-row.total input {
+  background: #f9f9f9;
+}
+
+.editable-price-row.gross input {
+  background: #FFC000;
+  color: #000;
+  font-weight: 700;
+}
+
+.editable-price-row.gross input[data-price-field="discount"] {
+  color: #c00000;
+}
+
+.draft-actions {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.draft-message {
+  border-radius: 6px;
+  font-size: 13px;
+  padding: 10px;
+}
+
+.draft-message.ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.draft-message.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 .debug-summary {
   display: grid;
   gap: 8px;

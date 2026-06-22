@@ -219,7 +219,7 @@ export async function recordOwnerFeedback(runId, payload = {}, context = {}) {
     throw error;
   }
 
-  const allowed = new Set(['sendable', 'minor_correction', 'wrong']);
+  const allowed = new Set(['sendable', 'minor_correction', 'wrong', 'rejected']);
   const rating = payload.rating || '';
   if (!allowed.has(rating)) {
     const error = new Error('invalid_feedback_rating');

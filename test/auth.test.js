@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { createPasswordHash, verifyPassword } from '../src/auth.js';
 import { createAdminApp } from '../src/admin/server.js';
+import { buildEditedDraftHtml } from '../src/admin/public/draft-review.js';
 import {
   filterReplayDuplicateRuns,
   findReplayDuplicateIds,
@@ -370,6 +371,153 @@ test('imap connect stores settings and disconnect removes credentials', async ()
     if (previousHostMap === undefined) delete process.env.TENANT_HOST_MAP;
     else process.env.TENANT_HOST_MAP = previousHostMap;
     await fs.rm(path.join('data', 'tenants', tenantId), { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('review draft html composer preserves n8n table styling and edited prices', () => {
+  const html = buildEditedDraftHtml({
+    intro: 'Sehr geehrter Herr Test,\n\nvielen Dank.',
+    rows: [
+      { product: 'Geänderter Hochlader', uvp: '€ 3.600,00', discount: '€ 410,00', offer: '€ 3.190,00' },
+      { product: 'Gesamt netto', uvp: '€ 3.000,00', discount: '€ 341,67', offer: '€ 2.658,33', type: 'total' },
+      { product: 'Gesamt brutto', uvp: '€ 3.600,00', discount: '€ 410,00', offer: '€ 3.190,00', type: 'gross' }
+    ],
+    notes: 'Bearbeiteter Hinweis',
+    signature: 'Beste Grüße\nLukas'
+  });
+
+  assert.match(html, /Geänderter Hochlader/);
+  assert.match(html, /€ 3\.190,00/);
+  assert.match(html, /background:#FFC000;font-weight:bold;color:#000/);
+  assert.match(html, /color:#c00000;font-weight:bold/);
+  assert.match(html, /background:#f9f9f9/);
+  assert.match(html, /border:1px solid #000/);
+  assert.match(html, /font-family:Arial,sans-serif;font-size:14px/);
+  assert.match(html, /Bearbeiteter Hinweis/);
+});
+
+test('review UI source contains prefilled fields spinner and success state hooks', async () => {
+  const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
+  assert.match(appSource, /data-draft-field="to" type="email" value="\$\{escapeHtml\(draft\.to\)\}"/);
+  assert.match(appSource, /data-draft-field="subject" type="text" value="\$\{escapeHtml\(draft\.subject\)\}"/);
+  assert.match(appSource, /data-price-field="offer" type="text" value="\$\{escapeHtml\(row\.offer\)\}"/);
+  assert.match(appSource, /button\.textContent = 'Sendet\.\.\.'/);
+  assert.match(appSource, /draft-message ok/);
+  assert.match(appSource, /send-to-customer/);
+});
+
+test('review send-to-customer endpoint validates sends edited draft and marks run sent', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const sentMails = [];
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret: 'send-session-secret',
+      cookieName: 'send_session',
+      secureCookie: false
+    },
+    mailRuntimeFactory: async () => ({
+      provider: 'test',
+      client: {},
+      sendHtmlMail: async (client, message) => sentMails.push(message)
+    })
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'owner@example.com', password: 'secret-pass' })
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie');
+
+    const inboundPayload = {
+      provider: 'gmail',
+      provider_message_id: `send-flow-${Date.now()}`,
+      subject: 'Eduard Anfrage',
+      from_email: 'kunde@example.at',
+      received_at: new Date().toISOString(),
+      raw_html: `
+        <table>
+          <tr><td><strong>Vorname</strong></td><td>Eva</td></tr>
+          <tr><td><strong>Nachname</strong></td><td>Kunde</td></tr>
+          <tr><td><strong>E-mail-Adresse</strong></td><td>eva@example.at</td></tr>
+          <tr><td>Hochlader 3318 3500kg</td><td>&euro; 3.000,00</td></tr>
+        </table>`
+    };
+    const inbound = await fetch(`${baseUrl}/api/inbound/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify(inboundPayload)
+    });
+    assert.equal(inbound.status, 201);
+    const inboundBody = await inbound.json();
+
+    const processed = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/process`, {
+      method: 'POST',
+      headers: { Cookie: cookie }
+    });
+    assert.equal(processed.status, 200);
+
+    const missingTo = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/send-to-customer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ subject: 'Bearbeitetes Eduard Angebot', html: '<p>Hallo</p>' })
+    });
+    assert.equal(missingTo.status, 400);
+    assert.deepEqual(await missingTo.json(), { ok: false, error: 'to_required' });
+
+    const missingHtml = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/send-to-customer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ to: 'edited@example.at', subject: 'Bearbeitetes Eduard Angebot' })
+    });
+    assert.equal(missingHtml.status, 400);
+    assert.deepEqual(await missingHtml.json(), { ok: false, error: 'html_required' });
+
+    const editedHtml = [
+      '<div style="font-family:Arial;font-size:14px;">',
+      '<p>Sehr geehrte Frau Kunde, hier ist das bearbeitete Angebot.</p>',
+      '<table style="border-collapse:collapse;font-family:Arial;font-size:14px;">',
+      '<tr style="background:#FFC000;font-weight:bold;color:#000;"><th style="border:1px solid #000;">Produkt</th><th style="border:1px solid #000;">UVP</th><th style="border:1px solid #000;color:#c00000;">Rabatt</th><th style="border:1px solid #000;">Angebot</th></tr>',
+      '<tr><td style="border:1px solid #000;">Bearbeiteter Hochlader</td><td style="border:1px solid #000;">€ 3.600,00</td><td style="border:1px solid #000;color:#c00000;font-weight:bold;">€ 410,00</td><td style="border:1px solid #000;">€ 3.190,00</td></tr>',
+      '<tr style="background:#FFC000;font-weight:bold;"><td style="border:1px solid #000;">Gesamt brutto</td><td style="border:1px solid #000;">€ 3.600,00</td><td style="border:1px solid #000;color:#c00000;">€ 410,00</td><td style="border:1px solid #000;">€ 3.190,00</td></tr>',
+      '</table><p>Hinweis nach Bearbeitung.</p><p>Beste Grüße<br>Lukas Mitter</p></div>'
+    ].join('');
+
+    const send = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/send-to-customer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        to: 'edited@example.at',
+        subject: 'Bearbeitetes Eduard Angebot',
+        html: editedHtml
+      })
+    });
+    assert.equal(send.status, 200);
+    const sendBody = await send.json();
+    assert.equal(sendBody.ok, true);
+    assert.match(sendBody.sent_at, /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(sentMails.length, 1);
+    assert.equal(sentMails[0].to, 'edited@example.at');
+    assert.equal(sentMails[0].subject, 'Bearbeitetes Eduard Angebot');
+    assert.match(sentMails[0].html, /Bearbeiteter Hochlader/);
+    assert.match(sentMails[0].html, /Hinweis nach Bearbeitung/);
+    assert.match(sentMails[0].html, /Beste Grüße/);
+
+    const detail = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}`, {
+      headers: { Cookie: cookie }
+    });
+    const detailBody = await detail.json();
+    assert.equal(detailBody.status, 'sent_to_customer');
+    assert.equal(detailBody.events.some((event) => event.event_type === 'sent_to_customer'), true);
+  } finally {
     await new Promise((resolve) => server.close(resolve));
   }
 });

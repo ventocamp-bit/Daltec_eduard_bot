@@ -100,6 +100,7 @@ export function createAdminApp(options = {}) {
   const gmailProofAnalyzer = options.gmailProofAnalyzer || buildGmailProofAnalysis;
   const microsoftOAuth = options.microsoftOAuth || {};
   const imap = options.imap || createDefaultImapRegistry();
+  const mailRuntimeFactory = options.mailRuntimeFactory || ((config, context) => createMailRuntime(config, context));
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false }));
@@ -684,6 +685,44 @@ export function createAdminApp(options = {}) {
     res.json(await setOfferRunStatus(req.params.id, req.body.status, req.body, req.tenantContext));
   } catch (error) {
     next(error);
+  }
+  });
+
+  app.post('/api/offer-runs/:id/send-to-customer', async (req, res) => {
+  try {
+    const run = await loadOfferRun(req.params.id, req.tenantContext);
+    if (!run) {
+      res.status(404).json({ ok: false, error: 'run_not_found' });
+      return;
+    }
+    const draft = normalizeCustomerSendPayload(req.body || {});
+    const config = loadConfig();
+    const runtime = await mailRuntimeFactory(config, req.tenantContext);
+    await runtime.sendHtmlMail(runtime.client, {
+      to: draft.to,
+      subject: draft.subject,
+      html: draft.html
+    });
+    const sentAt = new Date().toISOString();
+    await updateOfferRun(run.id, {
+      status: 'sent_to_customer',
+      draft_subject: draft.subject,
+      draft_html: draft.html,
+      completed_at: sentAt,
+      summary: {
+        ...(run.summary || {}),
+        customerEmail: draft.to,
+        customerSentAt: sentAt
+      }
+    }, req.tenantContext);
+    await appendOfferRunEvent(run.id, {
+      event_type: 'sent_to_customer',
+      message: `Edited draft sent to customer ${draft.to}`,
+      metadata: { to: draft.to, subject: draft.subject, provider: runtime.provider || 'unknown' }
+    }, req.tenantContext);
+    res.json({ ok: true, sent_at: sentAt });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ ok: false, error: error.message });
   }
   });
 
@@ -1388,6 +1427,28 @@ function escapeHtml(value) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function normalizeCustomerSendPayload(input = {}) {
+  const to = String(input.to || '').trim();
+  const subject = String(input.subject || '').trim();
+  const html = String(input.html || '').trim();
+  if (!to) {
+    const error = new Error('to_required');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!subject) {
+    const error = new Error('subject_required');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (!html) {
+    const error = new Error('html_required');
+    error.statusCode = 400;
+    throw error;
+  }
+  return { to, subject, html };
 }
 
 function reviewQueueItem(run) {
