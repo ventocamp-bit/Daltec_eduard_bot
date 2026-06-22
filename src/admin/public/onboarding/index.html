@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Eduard Onboarding</title>
+    <link rel="stylesheet" href="/styles.css">
+    <style>
+      body {
+        background: #f6f7f9;
+      }
+
+      .onboarding-shell {
+        display: grid;
+        gap: 14px;
+        margin: 0 auto;
+        max-width: 980px;
+        padding: 18px 20px 28px;
+      }
+
+      .onboarding-header {
+        align-items: center;
+        display: flex;
+        gap: 14px;
+        justify-content: space-between;
+      }
+
+      .step-nav {
+        display: grid;
+        gap: 8px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .step-tab {
+        background: #ffffff;
+        border: 1px solid #e1e5eb;
+        border-radius: 8px;
+        color: #475467;
+        display: grid;
+        gap: 3px;
+        min-height: 62px;
+        padding: 10px;
+        text-align: left;
+      }
+
+      .step-tab.active {
+        border-color: #111827;
+        color: #111827;
+      }
+
+      .step-tab.done {
+        border-color: #15803d;
+      }
+
+      .step-tab small {
+        color: #667085;
+        font-size: 11px;
+      }
+
+      .onboarding-card {
+        background: #ffffff;
+        border: 1px solid #e1e5eb;
+        border-radius: 8px;
+        display: grid;
+        gap: 14px;
+        padding: 16px;
+      }
+
+      .onboarding-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .onboarding-grid label,
+      .upload-box {
+        display: grid;
+        gap: 6px;
+      }
+
+      .onboarding-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: flex-end;
+      }
+
+      .check-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .check-row {
+        align-items: center;
+        background: #f8fafc;
+        border: 1px solid #e7ebf0;
+        border-radius: 6px;
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+        padding: 10px;
+      }
+
+      .check-row strong {
+        font-size: 14px;
+      }
+
+      .check-row span {
+        color: #667085;
+        font-size: 12px;
+      }
+
+      .status-pill {
+        border: 1px solid #d4dae3;
+        border-radius: 999px;
+        color: #475467;
+        font-size: 12px;
+        padding: 4px 8px;
+        white-space: nowrap;
+      }
+
+      .status-pill.done {
+        background: #ecfdf3;
+        border-color: #bbf7d0;
+        color: #166534;
+      }
+
+      .status-pill.open {
+        background: #fffbeb;
+        border-color: #fed7aa;
+        color: #92400e;
+      }
+
+      @media (max-width: 760px) {
+        .onboarding-header {
+          align-items: stretch;
+          display: grid;
+        }
+
+        .step-nav,
+        .onboarding-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .onboarding-actions {
+          justify-content: stretch;
+        }
+
+        .onboarding-actions > * {
+          flex: 1;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="onboarding-shell">
+      <header class="onboarding-header">
+        <div>
+          <h1>Eduard Onboarding</h1>
+          <p>Händler einrichten, Gmail verbinden, Lager-CSV laden.</p>
+        </div>
+        <a class="button-link secondary-link" href="/">Admin öffnen</a>
+      </header>
+
+      <nav class="step-nav" aria-label="Onboarding Schritte">
+        <button class="step-tab active" type="button" data-step="0"><strong>1. Händlerdaten</strong><small>Basisdaten</small></button>
+        <button class="step-tab" type="button" data-step="1"><strong>2. Gmail OAuth</strong><small>Mailzugriff</small></button>
+        <button class="step-tab" type="button" data-step="2"><strong>3. CSV Upload</strong><small>Lagerdaten</small></button>
+        <button class="step-tab" type="button" data-step="3"><strong>4. Bestätigung</strong><small>Prüfen</small></button>
+      </nav>
+
+      <section class="onboarding-card" data-panel="0">
+        <div>
+          <h2>Händlerdaten</h2>
+          <p>Diese Daten identifizieren den Händler im Admin-Bereich.</p>
+        </div>
+        <form id="dealer-form" class="onboarding-grid">
+          <label>Händlername <input name="name" type="text" autocomplete="organization" required></label>
+          <label>Standort <input name="locationName" type="text" autocomplete="address-level2"></label>
+          <label>Ansprechpartner <input name="contactName" type="text" autocomplete="name"></label>
+          <label>E-Mail <input name="contactEmail" type="email" autocomplete="email"></label>
+          <label>Telefon <input name="contactPhone" type="tel" autocomplete="tel"></label>
+        </form>
+        <div class="onboarding-actions">
+          <button id="save-dealer" type="button">Speichern und weiter</button>
+        </div>
+      </section>
+
+      <section class="onboarding-card" data-panel="1" hidden>
+        <div>
+          <h2>Gmail OAuth</h2>
+          <p>Google-Zugriff verbinden, damit neue Eduard-Anfragen verarbeitet werden können.</p>
+        </div>
+        <div class="check-list" id="mail-checks"></div>
+        <div class="onboarding-actions">
+          <button class="secondary" type="button" data-prev>Zurück</button>
+          <a class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
+          <button type="button" data-next>Weiter</button>
+        </div>
+      </section>
+
+      <section class="onboarding-card" data-panel="2" hidden>
+        <div>
+          <h2>CSV Upload</h2>
+          <p>Lager- und Preisdaten als CSV hochladen.</p>
+        </div>
+        <label class="upload-box">Lager-CSV <input id="csv-file" type="file" accept=".csv,text/csv"></label>
+        <div class="status" id="upload-status">Keine Datei geladen.</div>
+        <div class="onboarding-actions">
+          <button class="secondary" type="button" data-prev>Zurück</button>
+          <a class="button-link secondary-link" href="/api/sample-csv">Muster-CSV</a>
+          <button id="upload-csv" type="button">CSV hochladen</button>
+          <button type="button" data-next>Weiter</button>
+        </div>
+      </section>
+
+      <section class="onboarding-card" data-panel="3" hidden>
+        <div>
+          <h2>Bestätigung</h2>
+          <p>Wenn alle Punkte erledigt sind, kann der Händler im Admin weiterarbeiten.</p>
+        </div>
+        <div class="check-list" id="final-checks"></div>
+        <div class="onboarding-actions">
+          <button class="secondary" type="button" data-prev>Zurück</button>
+          <button id="refresh-status" class="secondary" type="button">Status aktualisieren</button>
+          <a class="button-link" href="/">Zum Dashboard</a>
+        </div>
+      </section>
+
+      <div class="status" id="onboarding-status">Lade Status...</div>
+    </main>
+    <script src="/onboarding/onboarding.js"></script>
+  </body>
+</html>
