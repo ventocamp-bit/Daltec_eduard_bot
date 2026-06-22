@@ -9,6 +9,7 @@ const loginPassword = document.querySelector('#login-password');
 const loginError = document.querySelector('#login-error');
 const dataStatusEl = document.querySelector('#data-status');
 const previewFrame = document.querySelector('#preview-frame');
+const previewStateLabel = document.querySelector('#preview-state-label');
 const offerListEl = document.querySelector('#offer-list');
 const offerCountEl = document.querySelector('#offer-count');
 const runListEl = document.querySelector('#run-list');
@@ -50,6 +51,7 @@ const navButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
 const panelViews = Array.from(document.querySelectorAll('.panel-view'));
 const contentShell = document.querySelector('.content-shell');
 let currentSettings = {};
+let activeDraftPreviewForm = null;
 
 document.querySelector('#save').addEventListener('click', save);
 document.querySelector('#logout').addEventListener('click', logout);
@@ -66,6 +68,8 @@ reviewListEl.addEventListener('click', handleReviewQueueClick);
 sendReviewDigestButton.addEventListener('click', sendReviewDigest);
 runDetailCloseEl.addEventListener('click', () => {
   runDetailEl.hidden = true;
+  activeDraftPreviewForm = null;
+  preview().catch((error) => setStatus(error.message));
 });
 productGroupsEl.addEventListener('input', handleProductGroupsChange);
 productGroupsEl.addEventListener('change', handleProductGroupsChange);
@@ -184,12 +188,17 @@ async function save() {
 }
 
 async function preview() {
+  if (activeDraftPreviewForm) {
+    syncDraftPreview(activeDraftPreviewForm);
+    return;
+  }
   setStatus('Erzeuge Vorschau...');
   const result = await request('/api/preview', {
     method: 'POST',
     body: JSON.stringify({ settings: readForm() })
   });
   previewFrame.srcdoc = result.html_angebot;
+  previewStateLabel.textContent = 'Live';
   setStatus('Vorschau aktuell');
 }
 
@@ -707,7 +716,13 @@ async function renderRunDetail(runId) {
   runDetailEl.hidden = false;
   runDetailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const form = runDetailBodyEl.querySelector('[data-draft-review-form]');
-  form?.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
+  if (form) {
+    activeDraftPreviewForm = form;
+    form.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
+    form.addEventListener('input', () => syncDraftPreview(form));
+    form.addEventListener('change', () => syncDraftPreview(form));
+    syncDraftPreview(form);
+  }
   runDetailBodyEl.querySelector('[data-reject-draft]')?.addEventListener('click', () => rejectDraft(run.id));
   setStatus('Draft Review geladen');
 }
@@ -889,6 +904,12 @@ function buildEditedDraftPayload(form) {
     signature: form.querySelector('[data-draft-field="signature"]').value
   });
   return { to, subject, html };
+}
+
+function syncDraftPreview(form) {
+  previewFrame.srcdoc = buildEditedDraftPayload(form).html;
+  previewStateLabel.textContent = 'Draft';
+  setStatus('Draft Vorschau aktuell');
 }
 
 function debugMetric(label, value) {

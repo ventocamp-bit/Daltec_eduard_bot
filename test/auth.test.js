@@ -405,6 +405,9 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /button\.textContent = 'Sendet\.\.\.'/);
   assert.match(appSource, /draft-message ok/);
   assert.match(appSource, /send-to-customer/);
+  assert.match(appSource, /form\.addEventListener\('input', \(\) => syncDraftPreview\(form\)\)/);
+  assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
+  assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);
 });
 
 test('review send-to-customer endpoint validates sends edited draft and marks run sent', async () => {
