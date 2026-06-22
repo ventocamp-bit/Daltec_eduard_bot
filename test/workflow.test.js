@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { extractInquiry } from '../src/core/parser.js';
+import { buildOfferEmail } from '../src/core/email-template.js';
 import { calculateInquiryOffer, resolveProductCategory } from '../src/core/pricing.js';
 import { matchInventory, getTrailerType } from '../src/core/inventory.js';
 import { validateInventoryCsv } from '../src/core/csv-validator.js';
@@ -651,6 +652,108 @@ test('adds dynamic n8n hint texts for configured accessories and trailer risks',
   assert.match(result.offer.html_angebot, /Hinweis Elektropumpe/);
   assert.match(result.offer.html_angebot, /Hinweis Heckstützen/);
 });
+
+test('renders translated customer offer templates for scenarios A B C in DE NL CZ', () => {
+  const expectations = {
+    de: {
+      subject: 'Ihr Eduard Angebot',
+      greeting: 'Sehr geehrte/r',
+      intro: 'vielen Dank',
+      desired: 'Ihre Wunsch-Konfiguration',
+      stock: 'Sofort ab Lager',
+      alternative: 'Alternativ steht',
+      position: 'Position',
+      total: 'Gesamt',
+      regards: 'Beste Gr'
+    },
+    nl: {
+      subject: 'Uw Eduard offerte',
+      greeting: 'Geachte',
+      intro: 'bedankt voor uw aanvraag',
+      desired: 'Uw gewenste configuratie',
+      stock: 'Direct uit voorraad',
+      alternative: 'Als alternatief',
+      position: 'Positie',
+      total: 'Totaal',
+      regards: 'Met vriendelijke groet'
+    },
+    cs: {
+      subject: 'Va\u0161e nab\u00eddka Eduard',
+      greeting: 'V\u00e1\u017een\u00fd z\u00e1kazn\u00edku',
+      intro: 'd\u011bkujeme za va\u0161i popt\u00e1vku',
+      desired: 'Va\u0161e po\u017eadovan\u00e1 konfigurace',
+      stock: 'Ihned k dispozici ze skladu',
+      alternative: 'Alternativn\u011b',
+      position: 'Polo\u017eka',
+      total: 'Celkem',
+      regards: 'S pozdravem'
+    }
+  };
+
+  for (const language of ['de', 'nl', 'cs']) {
+    for (const scenario of ['A', 'B', 'C']) {
+      const offer = buildOfferEmail(templateScenario(scenario, language));
+      const expected = expectations[language];
+
+      assert.match(offer.betreff, new RegExp(expected.subject), `${language} ${scenario} subject`);
+      assert.match(offer.html_angebot, new RegExp(expected.greeting), `${language} ${scenario} greeting`);
+      assert.match(offer.html_angebot, new RegExp(expected.intro), `${language} ${scenario} intro`);
+      assert.match(offer.html_angebot, new RegExp(expected.position), `${language} ${scenario} position`);
+      assert.match(offer.html_angebot, new RegExp(expected.total), `${language} ${scenario} total`);
+      assert.match(offer.html_angebot, new RegExp(expected.regards), `${language} ${scenario} regards`);
+
+      if (scenario === 'A' || scenario === 'C') {
+        assert.match(offer.html_angebot, new RegExp(expected.desired), `${language} ${scenario} desired`);
+      }
+      if (scenario === 'B' || scenario === 'C') {
+        assert.match(offer.html_angebot, new RegExp(expected.stock), `${language} ${scenario} stock`);
+      }
+      if (scenario === 'C') {
+        assert.match(offer.html_angebot, new RegExp(expected.alternative), `${language} ${scenario} alternative`);
+      }
+    }
+  }
+});
+
+function templateScenario(scenario, inputLanguage) {
+  const base = {
+    input_language: inputLanguage,
+    kunde_vorname: 'Alex',
+    kunde_nachname: 'Customer',
+    kunde_email: 'alex@example.com',
+    line_items: [{ produkt_name_original: 'Hochlader 3318 3500kg' }],
+    kalkulation_anfrage: {
+      gesamt_uvp_brutto: 3600,
+      gesamt_angebot_brutto: 3140,
+      gesamt_rabatt_brutto: 460,
+      positionen: [
+        { produkt_name: 'Hochlader 3318 3500kg', kategorie: 'anhaenger', uvp_netto: 3000, angebot_netto: 2616.67 }
+      ]
+    },
+    upsell_daten: []
+  };
+
+  if (scenario === 'A') return { ...base, hat_match: false };
+
+  const stock = {
+    gesamt_uvp_brutto: 5990,
+    gesamt_angebot_brutto: 5220,
+    gesamt_rabatt_brutto: 770,
+    positionen: [
+      { produkt_name: 'Hochlader 3318 Lager', kategorie: 'anhaenger', uvp_netto: 4991.67, angebot_netto: 4350 }
+    ]
+  };
+  return {
+    ...base,
+    hat_match: true,
+    top_lager_name: 'Eduard Hochlader Lager',
+    kalkulation_lager: stock,
+    upsell_daten: [{
+      angefragt: scenario === 'B' ? '3318-4-PB30-3563 Hochlader 3318 3500kg' : 'Hochlader 3318 3500kg',
+      top_upsell: { 'Art.-Nr.': scenario === 'B' ? '3318-4-PB30-3563' : '3318-4-PB30-3563-X' }
+    }]
+  };
+}
 
 test('reads semicolon separated CSV objects for local uploads', async () => {
   const file = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'eduard-')), 'lager.csv');
