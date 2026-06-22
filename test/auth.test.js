@@ -292,6 +292,86 @@ test('microsoft oauth start redirects and callback stores tenant token', async (
   }
 });
 
+test('imap connect stores settings and disconnect removes credentials', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const tenantId = `imap-api-${Date.now()}`;
+  const previousHostMap = process.env.TENANT_HOST_MAP;
+  process.env.TENANT_HOST_MAP = `imap.example.at=${tenantId}`;
+  const pollerEvents = [];
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret: 'imap-session-secret',
+      cookieName: 'imap_session',
+      secureCookie: false
+    },
+    imap: {
+      testConnection: async (imap) => {
+        if (imap.app_password !== 'correct-app-password') {
+          const error = new Error('imap_auth_failed');
+          error.statusCode = 401;
+          throw error;
+        }
+      },
+      startTenant: (tenantIdForStart) => pollerEvents.push(['start', tenantIdForStart]),
+      stopTenant: (tenantIdForStop) => pollerEvents.push(['stop', tenantIdForStop])
+    }
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-Host': 'imap.example.at' },
+      body: JSON.stringify({ email: 'owner@example.com', password: 'secret-pass' })
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie');
+
+    const bad = await fetch(`${baseUrl}/api/tenant/${tenantId}/imap/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, 'X-Forwarded-Host': 'imap.example.at' },
+      body: JSON.stringify({ email: 'anfragen@example.at', app_password: 'wrong-app-password' })
+    });
+    assert.equal(bad.status, 401);
+    assert.match(await bad.text(), /imap_auth_failed/);
+
+    const connected = await fetch(`${baseUrl}/api/tenant/${tenantId}/imap/connect`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, 'X-Forwarded-Host': 'imap.example.at' },
+      body: JSON.stringify({ email: 'anfragen@example.at', app_password: 'correct-app-password', host: 'imap.example.at' })
+    });
+    assert.equal(connected.status, 200);
+    assert.deepEqual(await connected.json(), { ok: true, active: true });
+    assert.deepEqual(pollerEvents, [['start', tenantId]]);
+
+    const settingsPath = path.join('data', 'tenants', tenantId, 'settings.json');
+    const settings = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
+    assert.equal(settings.imap.email, 'anfragen@example.at');
+    assert.equal(settings.imap.app_password, 'correct-app-password');
+    assert.equal(settings.imap.host, 'imap.example.at');
+
+    const disconnected = await fetch(`${baseUrl}/api/tenant/${tenantId}/imap/disconnect`, {
+      method: 'DELETE',
+      headers: { Cookie: cookie, 'X-Forwarded-Host': 'imap.example.at' }
+    });
+    assert.equal(disconnected.status, 200);
+    assert.deepEqual(await disconnected.json(), { ok: true, active: false });
+    assert.deepEqual(pollerEvents, [['start', tenantId], ['stop', tenantId]]);
+
+    const afterDisconnect = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
+    assert.equal(afterDisconnect.imap, undefined);
+  } finally {
+    if (previousHostMap === undefined) delete process.env.TENANT_HOST_MAP;
+    else process.env.TENANT_HOST_MAP = previousHostMap;
+    await fs.rm(path.join('data', 'tenants', tenantId), { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('admin API requires login session', async () => {
   const passwordHash = createPasswordHash('secret-pass');
   const sessionSecret = 'test-session-secret';

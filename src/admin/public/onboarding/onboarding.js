@@ -11,6 +11,11 @@ const pageStatus = document.querySelector('#onboarding-status');
 const mailChecks = document.querySelector('#mail-checks');
 const finalChecks = document.querySelector('#final-checks');
 const refreshButton = document.querySelector('#refresh-status');
+const mailTabs = [...document.querySelectorAll('[data-mail-tab]')];
+const mailPanels = [...document.querySelectorAll('[data-mail-panel]')];
+const imapForm = document.querySelector('#imap-form');
+const connectImapButton = document.querySelector('#connect-imap');
+const imapResult = document.querySelector('#imap-result');
 
 const CSV_HEADER_ALIASES = {
   sku: ['Art.-Nr.', 'Artikelnummer', 'Produktcode'],
@@ -48,6 +53,10 @@ saveDealerButton.addEventListener('click', saveDealer);
 uploadButton.addEventListener('click', uploadCsv);
 uploadInput.addEventListener('change', validateSelectedCsv);
 refreshButton.addEventListener('click', refresh);
+connectImapButton.addEventListener('click', connectImap);
+mailTabs.forEach((tab) => {
+  tab.addEventListener('click', () => showMailTab(tab.dataset.mailTab));
+});
 
 boot();
 
@@ -136,6 +145,55 @@ async function uploadCsv() {
   uploadStatus.textContent = `CSV gespeichert. ${payload.validation?.stats?.rowCount || 0} Zeilen geprüft.`;
   await refresh();
   showStep(3);
+}
+
+async function connectImap() {
+  if (!imapForm.reportValidity()) return;
+  const tenantId = tenant?.id;
+  if (!tenantId) {
+    showImapResult('error', 'Händlerdaten zuerst speichern.');
+    return;
+  }
+
+  const formData = new FormData(imapForm);
+  connectImapButton.disabled = true;
+  connectImapButton.textContent = 'Verbindung wird getestet...';
+  hideImapResult();
+  try {
+    await request(`/api/tenant/${encodeURIComponent(tenantId)}/imap/connect`, {
+      method: 'POST',
+      body: JSON.stringify({
+        email: String(formData.get('email') || '').trim(),
+        app_password: String(formData.get('app_password') || '').trim()
+      })
+    });
+    showImapResult('ok', '✅ Verbunden! Eduard liest deine Mails alle 5 Minuten automatisch.');
+    imapForm.reset();
+    await refresh();
+  } catch (error) {
+    showImapResult('error', '❌ Verbindung fehlgeschlagen. Bitte prüfe Email-Adresse und App-Passwort. Falls IMAP bei deinem Anbieter deaktiviert ist, wende dich an deinen IT-Admin.');
+  } finally {
+    connectImapButton.disabled = false;
+    connectImapButton.textContent = 'Verbindung testen';
+  }
+}
+
+function showMailTab(name) {
+  mailTabs.forEach((tab) => tab.classList.toggle('active', tab.dataset.mailTab === name));
+  mailPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.mailPanel !== name;
+  });
+}
+
+function showImapResult(type, message) {
+  imapResult.hidden = false;
+  imapResult.className = `imap-result ${type}`;
+  imapResult.textContent = message;
+}
+
+function hideImapResult() {
+  imapResult.hidden = true;
+  imapResult.textContent = '';
 }
 
 function initSampleCsvDownload() {

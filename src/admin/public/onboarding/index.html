@@ -154,6 +154,55 @@
         padding-left: 18px;
       }
 
+      .mail-tabs {
+        display: flex;
+        gap: 8px;
+      }
+
+      .mail-tab {
+        background: #ffffff;
+        border: 1px solid #d4dae3;
+        border-radius: 6px;
+        color: #475467;
+        padding: 8px 10px;
+      }
+
+      .mail-tab.active {
+        border-color: #111827;
+        color: #111827;
+      }
+
+      .mail-panel {
+        border: 1px solid #e1e5eb;
+        border-radius: 8px;
+        display: grid;
+        gap: 12px;
+        padding: 12px;
+      }
+
+      .imap-step {
+        display: grid;
+        gap: 8px;
+      }
+
+      .imap-result {
+        border-radius: 6px;
+        font-size: 13px;
+        padding: 10px;
+      }
+
+      .imap-result.ok {
+        background: #ecfdf3;
+        border: 1px solid #bbf7d0;
+        color: #166534;
+      }
+
+      .imap-result.error {
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        color: #991b1b;
+      }
+
       @media (max-width: 760px) {
         .onboarding-header {
           align-items: stretch;
@@ -211,14 +260,42 @@
 
       <section class="onboarding-card" data-panel="1" hidden>
         <div>
-          <h2>Gmail OAuth</h2>
-          <p>Google-Zugriff verbinden, damit neue Eduard-Anfragen verarbeitet werden können.</p>
+          <h2>Mail verbinden</h2>
+          <p>Mailzugriff verbinden, damit neue Eduard-Anfragen verarbeitet werden können.</p>
+        </div>
+        <div class="mail-tabs" role="tablist" aria-label="Mail-Verbindung">
+          <button class="mail-tab active" type="button" data-mail-tab="gmail">Gmail</button>
+          <button class="mail-tab" type="button" data-mail-tab="imap">📧 Outlook / IMAP</button>
+        </div>
+        <div class="mail-panel" data-mail-panel="gmail">
+          <div>
+            <h3>Gmail verbinden</h3>
+            <p>Google-Zugriff verbinden oder Microsoft OAuth verwenden.</p>
+          </div>
+          <div class="onboarding-actions">
+            <a class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
+            <a class="button-link" href="/api/oauth/microsoft/start">Mit Microsoft verbinden</a>
+          </div>
+        </div>
+        <div class="mail-panel" data-mail-panel="imap" hidden>
+          <div class="imap-step">
+            <h3>App-Passwort erstellen</h3>
+            <p>Damit Eduard deine Mails lesen darf, brauchst du ein App-Passwort. Das ist kein normales Passwort — es gilt nur für Eduard.</p>
+            <a class="button-link secondary-link" href="https://account.microsoft.com/" target="_blank" rel="noreferrer">account.microsoft.com öffnen →</a>
+            <p>Klicke dort auf: Sicherheit → Erweiterte Sicherheit → App-Passwörter → Neues App-Passwort</p>
+          </div>
+          <form id="imap-form" class="onboarding-grid">
+            <label>Email-Adresse <input name="email" type="email" placeholder="anfragen@meinbetrieb.at" autocomplete="email" required></label>
+            <label>App-Passwort <input name="app_password" type="password" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off" required></label>
+          </form>
+          <div class="onboarding-actions">
+            <button id="connect-imap" type="button">Verbindung testen</button>
+          </div>
+          <div id="imap-result" class="imap-result" hidden></div>
         </div>
         <div class="check-list" id="mail-checks"></div>
         <div class="onboarding-actions">
           <button class="secondary" type="button" data-prev>Zurück</button>
-          <a class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
-          <a class="button-link" href="/api/oauth/microsoft/start">Mit Microsoft verbinden</a>
           <button type="button" data-next>Weiter</button>
         </div>
       </section>

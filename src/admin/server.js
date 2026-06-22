@@ -26,7 +26,9 @@ import { buildRuntimeReadiness } from '../production-readiness.js';
 import { exportGmailMessages } from '../export-mails.js';
 import { extractInquiry } from '../core/parser.js';
 import { resolveProductCategory } from '../core/pricing.js';
+import { createImapPollerRegistry, testImapConnection } from '../core/imap-poller.js';
 import { listInventoryImports } from '../inventory-import.js';
+import { processMailMessage } from '../index.js';
 import {
   buildReviewQueue as buildSharedReviewQueue,
   sendReviewQueueDigest as sendSharedReviewQueueDigest
@@ -97,6 +99,7 @@ export function createAdminApp(options = {}) {
   const auth = options.auth || authConfig();
   const gmailProofAnalyzer = options.gmailProofAnalyzer || buildGmailProofAnalysis;
   const microsoftOAuth = options.microsoftOAuth || {};
+  const imap = options.imap || createDefaultImapRegistry();
 
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: false }));
@@ -544,6 +547,32 @@ export function createAdminApp(options = {}) {
   }
   });
 
+  app.post('/api/tenant/:tenantId/imap/connect', async (req, res, next) => {
+  try {
+    ensureTenantParam(req);
+    const imapSettings = normalizeImapPayload(req.body || {});
+    await (imap.testConnection || testImapConnection)(imapSettings);
+    const settings = await loadSettings(req.tenantContext);
+    await saveSettings({ ...settings, imap: imapSettings }, req.tenantContext);
+    await imap.startTenant?.(req.params.tenantId);
+    res.json({ ok: true, active: imap.isActive ? imap.isActive(req.params.tenantId) : true });
+  } catch (error) {
+    next(error);
+  }
+  });
+
+  app.delete('/api/tenant/:tenantId/imap/disconnect', async (req, res, next) => {
+  try {
+    ensureTenantParam(req);
+    const settings = await loadSettings(req.tenantContext);
+    await saveSettings({ ...settings, imap: undefined }, req.tenantContext);
+    imap.stopTenant?.(req.params.tenantId);
+    res.json({ ok: true, active: false });
+  } catch (error) {
+    next(error);
+  }
+  });
+
   app.get('/api/offers', async (req, res, next) => {
   try {
     res.json(await listOfferRecords(25, req.tenantContext));
@@ -733,6 +762,61 @@ export function createAdminApp(options = {}) {
   });
 
   return app;
+}
+
+function createDefaultImapRegistry() {
+  return createImapPollerRegistry({
+    loadSettings,
+    tenantContext: (tenantId) => tenantContext({ tenantId }),
+    onMessage: async (message, context) => {
+      const settings = await loadSettings(context);
+      const config = loadConfig();
+      const effectiveConfig = {
+        ...config,
+        gmail: {
+          ...config.gmail,
+          to: settings.mail?.to || config.gmail.to,
+          cc: 'ventocamp@gmail.com',
+          subject: settings.mail?.subject || settings.mail?.internalSubject || config.gmail.subject
+        }
+      };
+      await processMailMessage(message, {
+        provider: 'imap',
+        client: null,
+        labelMessage: async () => null,
+        markMessageRead: async () => null,
+        sendHtmlMail: async () => {
+          const error = new Error('imap_send_not_supported');
+          error.statusCode = 400;
+          throw error;
+        }
+      }, effectiveConfig, settings, { forcedTenantContext: context });
+    }
+  });
+}
+
+function ensureTenantParam(req) {
+  if (req.params.tenantId === req.tenantContext.tenantId) return;
+  const error = new Error('tenant_forbidden');
+  error.statusCode = 403;
+  throw error;
+}
+
+function normalizeImapPayload(input = {}) {
+  const email = String(input.email || '').trim();
+  const appPassword = String(input.app_password || '').trim();
+  if (!email || !appPassword) {
+    const error = new Error('imap_credentials_required');
+    error.statusCode = 400;
+    throw error;
+  }
+  return {
+    email,
+    app_password: appPassword,
+    ...(input.host ? { host: String(input.host).trim() } : {}),
+    ...(input.port ? { port: Number(input.port) } : {}),
+    ...(typeof input.tls === 'boolean' ? { tls: input.tls } : {})
+  };
 }
 
 function authorizeIngest(req) {

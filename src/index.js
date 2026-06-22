@@ -9,6 +9,7 @@ import { DEFAULT_TENANT_ID, listTenantContexts, tenantContext } from './tenant-c
 import { processOfferRun } from './offer-run-service.js';
 import { createMailRuntime } from './mail-runtime.js';
 import { loadMailConnections } from './mail-connections.js';
+import { fetchUnseenImapMessages } from './core/imap-poller.js';
 import { deliverRunDraftToOwner } from './owner-delivery.js';
 import { sendReviewReminderIfDue } from './review-digest.js';
 import { resolveTenantContextForInbound } from './dealer-routing.js';
@@ -101,11 +102,14 @@ async function pollConnectedTenantInboxes() {
   const contexts = await listTenantContexts();
   for (const context of contexts) {
     if (context.tenantId === DEFAULT_TENANT_ID) continue;
+    let settings = null;
     try {
+      settings = await loadSettings(context);
+      await pollTenantImapInbox(context, settings);
+
       const connections = await loadMailConnections(context);
       if (!connections.gmail?.token && !connections.outlook?.token) continue;
 
-      const settings = await loadSettings(context);
       const effectiveConfig = {
         ...config,
         gmail: {
@@ -127,8 +131,36 @@ async function pollConnectedTenantInboxes() {
         }
       }
     } catch (error) {
-      console.error(`[poll:${context.tenantId}] ${error.message}`);
+      console.error(`[poll:${context.tenantId}] ${sanitizePollError(error.message, settings?.imap)}`);
     }
+  }
+}
+
+async function pollTenantImapInbox(context, settings) {
+  if (!settings.imap?.email || !settings.imap?.app_password) return;
+  const effectiveConfig = {
+    ...config,
+    gmail: {
+      ...config.gmail,
+      to: settings.mail?.to || config.gmail.to,
+      cc: 'ventocamp@gmail.com',
+      subject: settings.mail?.subject || settings.mail?.internalSubject || config.gmail.subject
+    }
+  };
+  const mailRuntime = {
+    provider: 'imap',
+    client: null,
+    labelMessage: async () => null,
+    markMessageRead: async () => null,
+    sendHtmlMail: async () => {
+      const error = new Error('imap_send_not_supported');
+      error.statusCode = 400;
+      throw error;
+    }
+  };
+  const messages = await fetchUnseenImapMessages(settings.imap);
+  for (const message of messages) {
+    await processMailMessage(message, mailRuntime, effectiveConfig, settings, { forcedTenantContext: context });
   }
 }
 
@@ -246,6 +278,14 @@ export async function processMailMessage(message, mailRuntime, effectiveConfig, 
 function extractEmailAddress(value) {
   const match = String(value || '').match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
   return match ? match[1] : '';
+}
+
+function sanitizePollError(message, imap = {}) {
+  let safe = String(message || '');
+  for (const secret of [imap?.app_password, imap?.password].filter(Boolean)) {
+    safe = safe.split(String(secret)).join('***');
+  }
+  return safe;
 }
 
 async function runOnceSafely() {
