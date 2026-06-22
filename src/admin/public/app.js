@@ -367,9 +367,14 @@ function priceRuleRow(rule = {}) {
   const category = rule.category || 'alle';
   const source = rule.source || 'uvp_discount';
   const groups = readProductGroups().filter((group) => !['anhaenger', 'zubehoer'].includes(group.id));
+  const matchOptions = ['', 'Hochlader', 'Rückwärtskipper', 'Dreiseitenkipper', 'Autotransporter', 'Plane', 'Aufsatzbordwand', 'Laubgitter'];
+  const selectedMatch = rule.match || '';
   return `
     <div class="rule-row" data-rule-row>
-      <input data-rule-field="match" type="text" value="${escapeHtml(rule.match || '')}" placeholder="z.B. Hochlader, Plane, 4022">
+      <select data-rule-field="match">
+        ${matchOptions.map((value) => option(value, value || 'Alle', selectedMatch)).join('')}
+        ${selectedMatch && !matchOptions.includes(selectedMatch) ? option(selectedMatch, selectedMatch, selectedMatch) : ''}
+      </select>
       <select data-rule-field="category">
         ${option('alle', 'Alle', category)}
         ${groups.map((group) => option(group.id, group.label || group.id, category)).join('')}
