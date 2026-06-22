@@ -131,6 +131,29 @@
         color: #92400e;
       }
 
+      .csv-help {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: space-between;
+      }
+
+      .inline-errors {
+        background: #fff7ed;
+        border: 1px solid #fed7aa;
+        border-radius: 6px;
+        color: #9a3412;
+        display: grid;
+        font-size: 13px;
+        gap: 4px;
+        padding: 10px;
+      }
+
+      .inline-errors ul {
+        margin: 0;
+        padding-left: 18px;
+      }
+
       @media (max-width: 760px) {
         .onboarding-header {
           align-items: stretch;
@@ -204,11 +227,14 @@
           <h2>CSV Upload</h2>
           <p>Lager- und Preisdaten als CSV hochladen.</p>
         </div>
+        <div class="csv-help">
+          <a id="sample-csv-download" class="button-link secondary-link" href="#" download="eduard-lager-muster.csv">Muster-CSV herunterladen</a>
+        </div>
         <label class="upload-box">Lager-CSV <input id="csv-file" type="file" accept=".csv,text/csv"></label>
+        <div class="inline-errors" id="csv-errors" hidden></div>
         <div class="status" id="upload-status">Keine Datei geladen.</div>
         <div class="onboarding-actions">
           <button class="secondary" type="button" data-prev>Zurück</button>
-          <a class="button-link secondary-link" href="/api/sample-csv">Muster-CSV</a>
           <button id="upload-csv" type="button">CSV hochladen</button>
           <button type="button" data-next>Weiter</button>
         </div>
