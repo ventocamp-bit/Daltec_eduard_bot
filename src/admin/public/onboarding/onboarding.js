@@ -170,11 +170,18 @@ async function connectImap() {
       method: 'POST',
       body: JSON.stringify(payload)
     });
-    showImapResult('ok', '✅ Verbunden! Eduard liest deine Mails alle 5 Minuten automatisch.');
+    showImapResult('ok', '✅ Verbunden! Eduard liest deine Mails alle 5 Minuten.\nDu kannst dieses Fenster jetzt schließen.');
     imapForm.reset();
     await refresh();
   } catch (error) {
-    showImapResult('error', '❌ Verbindung fehlgeschlagen. Bitte prüfe Email-Adresse und App-Passwort. Falls IMAP bei deinem Anbieter deaktiviert ist, wende dich an deinen IT-Admin.');
+    const hostMatch = String(error.message || '').match(/host=([^\s]+)/);
+    const usedHost = hostMatch?.[1] || payload.host || 'dem IMAP-Server';
+    showImapResult('error', `❌ Verbindung zu ${usedHost} fehlgeschlagen.
+
+Häufige Ursachen:
+• App-Passwort falsch kopiert → nochmal erstellen
+• IMAP nicht aktiviert → outlook.live.com → Einstellungen → Mail → Weiterleitung und IMAP → IMAP einschalten
+• Eigene Domain (z.B. @meinbetrieb.at) → IMAP-Host manuell eingeben ↓`);
   } finally {
     connectImapButton.disabled = false;
     connectImapButton.textContent = 'Verbindung testen';

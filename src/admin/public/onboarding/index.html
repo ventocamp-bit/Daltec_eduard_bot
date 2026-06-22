@@ -189,6 +189,7 @@
         border-radius: 6px;
         font-size: 13px;
         padding: 10px;
+        white-space: pre-line;
       }
 
       .imap-result.ok {
@@ -279,19 +280,31 @@
         </div>
         <div class="mail-panel" data-mail-panel="imap" hidden>
           <div class="imap-step">
-            <h3>App-Passwort erstellen</h3>
-            <p>Damit Eduard deine Mails lesen darf, brauchst du ein App-Passwort. Das ist kein normales Passwort — es gilt nur für Eduard.</p>
+            <h3>Schritt 1 von 3 — App-Passwort erstellen</h3>
+            <p>Ein App-Passwort ist ein spezieller Zugangscode nur für Eduard. Dein normales Passwort bleibt geheim.</p>
+            <ol>
+              <li>Klicke auf den Button unten → Microsoft öffnet sich in einem neuen Tab</li>
+              <li>Melde dich an wenn nötig</li>
+              <li>Gehe zu: Sicherheit → Zweistufige Überprüfung (aktivieren falls nötig)</li>
+              <li>Scrolle zu "App-Kennwörter" → "Neues App-Kennwort erstellen"</li>
+              <li>Name eingeben: Eduard → Code kopieren</li>
+            </ol>
             <a class="button-link secondary-link" href="https://account.microsoft.com/" target="_blank" rel="noreferrer">account.microsoft.com öffnen →</a>
-            <p>Klicke dort auf: Sicherheit → Erweiterte Sicherheit → App-Passwörter → Neues App-Passwort</p>
+          </div>
+          <div class="imap-step">
+            <h3>Schritt 2 von 3 — Zugangsdaten eingeben</h3>
           </div>
           <form id="imap-form" class="onboarding-grid">
-            <label>Email-Adresse <input name="email" type="email" placeholder="anfragen@meinbetrieb.at" autocomplete="email" required></label>
-            <label>App-Passwort <input name="app_password" type="password" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off" required></label>
+            <label>Deine E-Mail-Adresse <input name="email" type="email" placeholder="anfragen@meinbetrieb.at" autocomplete="email" required></label>
+            <label>App-Passwort (gerade kopiert) <input name="app_password" type="password" placeholder="xxxx-xxxx-xxxx-xxxx" autocomplete="off" required><small style="color: #667085; font-size: 12px;">Nicht dein normales Passwort — nur den frisch erstellten Code eingeben.</small></label>
             <details>
               <summary>Erweitert</summary>
               <label>IMAP-Host <input name="host" type="text" placeholder="z.B. imap.meinanbieter.at" autocomplete="off"></label>
             </details>
           </form>
+          <div class="imap-step">
+            <h3>Schritt 3 von 3 — Verbindung testen</h3>
+          </div>
           <div class="onboarding-actions">
             <button id="connect-imap" type="button">Verbindung testen</button>
           </div>
