@@ -111,6 +111,22 @@ export async function listInventoryImports(limit = 20, context = {}) {
   return records.slice(-limit).reverse();
 }
 
+export async function markInventoryImportReplyMailFailed(context, importId) {
+  if (!importId) return null;
+  const records = await readInventoryImportRecords(context);
+  let updatedRecord = null;
+  const updated = records.map((record) => {
+    if (record.id !== importId) return record;
+    updatedRecord = { ...record, replyMailFailed: true };
+    return updatedRecord;
+  });
+  if (!updatedRecord) return null;
+  const filePath = inventoryImportsPath(context);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await atomicWriteFile(filePath, `${updated.map((record) => JSON.stringify(record)).join('\n')}\n`);
+  return updatedRecord;
+}
+
 export function buildInventoryImportFailureMail(result, settings = {}) {
   const errors = result.import?.errors || result.validation?.errors || [];
   const warnings = result.import?.warnings || result.validation?.warnings || [];
@@ -245,6 +261,7 @@ async function recordInventoryImport(context, record) {
     mapping: record.mapping || {},
     errors: record.errors || [],
     warnings: record.warnings || [],
+    replyMailFailed: record.replyMailFailed === true,
     stats: record.stats || null
   };
   const filePath = inventoryImportsPath(context);

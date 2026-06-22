@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 import dotenv from 'dotenv';
 import { loadConfig } from './config.js';
 import { loadSettings } from './settings.js';
@@ -16,6 +17,7 @@ import { labelForIgnoredRun, labelForProcessedRun } from './mail-labels.js';
 import {
   buildInventoryImportFailureMail,
   isInventoryImportMessage,
+  markInventoryImportReplyMailFailed,
   processInventoryImportMessage
 } from './inventory-import.js';
 import {
@@ -145,7 +147,7 @@ async function fetchPollMessages(mailRuntime, effectiveConfig) {
   return [...byId.values()];
 }
 
-async function processMailMessage(message, mailRuntime, effectiveConfig, settings, options = {}) {
+export async function processMailMessage(message, mailRuntime, effectiveConfig, settings, options = {}) {
     if (isInternalOwnerDraft(message, effectiveConfig, settings)) {
       await mailRuntime.labelMessage(mailRuntime.client, message.id, labelForIgnoredRun('internal'));
       await mailRuntime.markMessageRead(mailRuntime.client, message.id);
@@ -172,7 +174,10 @@ async function processMailMessage(message, mailRuntime, effectiveConfig, setting
             cc: messageSettings.mail?.to || effectiveConfig.gmail.to,
             subject: reply.subject,
             html: reply.html
-          }).catch((error) => console.error(`[inventory-import-reply] ${message.id}: ${error.message}`));
+          }).catch(async (error) => {
+            await markInventoryImportReplyMailFailed(messageContext, result.import?.id);
+            console.error(`[inventory-import-reply] ${message.id}: ${error.message}`);
+          });
         }
         await mailRuntime.labelMessage(mailRuntime.client, message.id, 'Eduard/inventory-import-failed').catch(() => null);
       } else {
@@ -262,7 +267,9 @@ function argValue(name) {
   return index === -1 ? null : process.argv[index + 1];
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

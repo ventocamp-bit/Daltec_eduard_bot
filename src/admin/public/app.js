@@ -803,6 +803,7 @@ async function refreshInventoryImports() {
             <strong>${escapeHtml(item.status === 'success' ? 'Import OK' : 'Import Fehler')}</strong>
             <small>${escapeHtml(detail)}</small>
           </div>
+          ${item.replyMailFailed ? '<span class="run-status failed_terminal">Antwortmail fehlgeschlagen</span>' : ''}
           <span class="run-status ${item.status === 'success' ? 'completed' : 'failed_terminal'}">${escapeHtml(item.status)}</span>
         </div>
       `;

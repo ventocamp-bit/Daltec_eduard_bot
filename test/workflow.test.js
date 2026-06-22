@@ -17,6 +17,7 @@ import { buildReplayReport, replayMessages } from '../src/replay.js';
 import { defaultExportQuery, isProofCandidate } from '../src/export-mails.js';
 import { buildUnreadQuery } from '../src/adapters/google.js';
 import { isInventoryImportMessage, listInventoryImports, processInventoryImportMessage } from '../src/inventory-import.js';
+import { processMailMessage } from '../src/index.js';
 import { strToU8, zipSync } from 'fflate';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -1058,6 +1059,47 @@ test('imports dealer inventory XLSX attachments with automatic column mapping', 
   assert.equal(result.ok, true);
   const written = await fs.readFile(context.inventoryPath, 'utf8');
   assert.match(written, /4020-4-AO3-3563-J;Autotransporter 406x200 3500kg;1;6900;4060;2000;3500/);
+});
+
+test('marks inventory import when failure reply mail cannot be sent', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'inventory-import-reply-failed-'));
+  const context = {
+    tenantId: 'inventory-import-reply-failed-test',
+    baseDir: dir,
+    tenantPath: path.join(dir, 'tenant.json'),
+    settingsPath: path.join(dir, 'settings.json'),
+    offersPath: path.join(dir, 'offers.jsonl'),
+    inventoryPath: path.join(dir, 'lager.csv'),
+    mailConnectionsPath: path.join(dir, 'mail-connections.json')
+  };
+  const message = {
+    id: 'inventory-reply-failed-1',
+    subject: 'Lagerliste Eduard',
+    from: 'Haendler <haendler@example.com>',
+    to: 'lager@example.com',
+    attachments: [{ filename: 'lager.csv', data: Buffer.from('Artikelnummer;Beschreibung\n3318-4-13-3563-N;Hochlader', 'utf8') }]
+  };
+  const mailRuntime = {
+    provider: 'gmail',
+    client: {},
+    sendHtmlMail: async () => {
+      throw new Error('SMTP unavailable');
+    },
+    labelMessage: async () => {},
+    markMessageRead: async () => {}
+  };
+
+  await processMailMessage(
+    message,
+    mailRuntime,
+    { gmail: { to: 'admin@example.com' } },
+    { data: { lagerCsvPath: context.inventoryPath }, mail: { to: 'admin@example.com' } },
+    { forcedTenantContext: context }
+  );
+
+  const imports = await listInventoryImports(5, context);
+  assert.equal(imports[0].status, 'failed');
+  assert.equal(imports[0].replyMailFailed, true);
 });
 
 function buildMinimalXlsx(rows) {
