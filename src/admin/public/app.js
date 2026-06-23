@@ -762,10 +762,7 @@ async function renderRunDetail(runId, options = {}) {
     activeDraftPreviewForm = form;
     if (!options.readOnly) {
       form.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
-      form.addEventListener('input', () => {
-        recalculateDraftTotals(form);
-        syncDraftPreview(form);
-      });
+      form.addEventListener('input', (event) => handleDraftReviewInput(event, form));
       form.addEventListener('change', () => {
         recalculateDraftTotals(form);
         syncDraftPreview(form);
@@ -819,7 +816,10 @@ function runDetailHtml(run, options = {}) {
           <thead>
             <tr>
               <th>Position</th>
+              <th>Eingabe</th>
+              <th>UVP netto</th>
               <th>UVP brutto</th>
+              <th>Angebot netto</th>
               <th>Angebot brutto</th>
             </tr>
           </thead>
@@ -855,15 +855,25 @@ function isOnboardingTestRun(run) {
 
 function draftPriceRowHtml(row, options = {}) {
   const calculated = ['total', 'vat', 'gross'].includes(row.type);
-  const readonly = calculated || options.readOnly ? ' readonly aria-readonly="true"' : '';
+  const mode = row.inputMode === 'net' ? 'net' : 'gross';
+  const rowLocked = calculated || options.readOnly;
+  const productReadonly = rowLocked ? ' readonly aria-readonly="true"' : '';
+  const netReadonly = rowLocked || mode !== 'net' ? ' readonly aria-readonly="true"' : '';
+  const grossReadonly = rowLocked || mode !== 'gross' ? ' readonly aria-readonly="true"' : '';
+  const modeCell = rowLocked
+    ? '<span class="price-mode-label">Automatisch</span>'
+    : `<button type="button" class="price-mode-toggle" data-toggle-price-mode>${mode === 'net' ? 'Brutto eingeben' : 'Netto eingeben'}</button>`;
   const deleteButton = !calculated && !options.readOnly
     ? '<button type="button" class="row-delete" data-delete-draft-row aria-label="Zeile löschen">×</button>'
     : '';
   return `
-    <tr class="editable-price-row ${escapeHtml(row.type || 'item')}" data-price-row data-row-type="${escapeHtml(row.type || 'item')}"${calculated ? ' data-calculated-row' : ''}>
-      <td><input data-price-field="product" type="text" value="${escapeHtml(row.product)}"${readonly}>${deleteButton}</td>
-      <td><input data-price-field="uvp" type="text" value="${escapeHtml(row.uvp)}"${readonly}></td>
-      <td><input data-price-field="offer" type="text" value="${escapeHtml(row.offer)}"${readonly}></td>
+    <tr class="editable-price-row ${escapeHtml(row.type || 'item')}" data-price-row data-row-type="${escapeHtml(row.type || 'item')}" data-price-mode="${mode}"${calculated ? ' data-calculated-row' : ''}>
+      <td><input data-price-field="product" type="text" value="${escapeHtml(row.product)}"${productReadonly}>${deleteButton}</td>
+      <td>${modeCell}</td>
+      <td><input data-price-field="uvpNet" type="text" inputmode="decimal" value="${escapeHtml(row.uvpNet || '')}"${netReadonly}></td>
+      <td><input data-price-field="uvpGross" type="text" inputmode="decimal" value="${escapeHtml(row.uvpGross || row.uvp)}"${grossReadonly}></td>
+      <td><input data-price-field="offerNet" type="text" inputmode="decimal" value="${escapeHtml(row.offerNet || '')}"${netReadonly}></td>
+      <td><input data-price-field="offerGross" type="text" inputmode="decimal" value="${escapeHtml(row.offerGross || row.offer)}"${grossReadonly}></td>
     </tr>
   `;
 }
@@ -990,20 +1000,26 @@ function draftRows(run) {
   const rows = positions.length
     ? positions.map((position) => ({
       product: position.produkt_name || 'Produkt',
-      uvp: formatMoney(Number(position.uvp_netto || 0) * 1.2),
-      offer: formatMoney(Number(position.angebot_netto || 0) * 1.2),
-      type: 'item'
+      uvpNet: formatPriceInput(Number(position.uvp_netto || 0)),
+      uvpGross: formatPriceInput(Number(position.uvp_netto || 0) * 1.2),
+      offerNet: formatPriceInput(Number(position.angebot_netto || 0)),
+      offerGross: formatPriceInput(Number(position.angebot_netto || 0) * 1.2),
+      type: 'item',
+      inputMode: 'gross'
     }))
     : items.map((item) => ({
       product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
-      uvp: formatMoney(item.preis_mail_brutto_num || item.price || 0),
-      offer: formatMoney(item.preis_mail_brutto_num || item.price || 0),
-      type: 'item'
+      uvpNet: formatPriceInput((item.preis_mail_brutto_num || item.price || 0) / 1.2),
+      uvpGross: formatPriceInput(item.preis_mail_brutto_num || item.price || 0),
+      offerNet: formatPriceInput((item.preis_mail_brutto_num || item.price || 0) / 1.2),
+      offerGross: formatPriceInput(item.preis_mail_brutto_num || item.price || 0),
+      type: 'item',
+      inputMode: 'gross'
     }));
   rows.push(
-    { product: 'Gesamt netto', uvp: formatMoney(pricing.gesamt_uvp_netto || pricing.totalUvpNet || 0), offer: formatMoney(pricing.gesamt_angebot_netto || 0), type: 'total' },
-    { product: '20% MwSt', uvp: '', offer: formatMoney(pricing.mwst_betrag || pricing.vat_amount || 0), type: 'vat' },
-    { product: 'Gesamt brutto', uvp: formatMoney(pricing.gesamt_uvp_brutto || pricing.uvpGross || 0), offer: formatMoney(pricing.gesamt_angebot_brutto || run.summary?.totalGross || 0), type: 'gross' }
+    { product: 'Gesamt netto', uvpNet: formatPriceInput(pricing.gesamt_uvp_netto || pricing.totalUvpNet || 0), offerNet: formatPriceInput(pricing.gesamt_angebot_netto || 0), type: 'total' },
+    { product: '20% MwSt', uvpGross: '', offerGross: formatPriceInput(pricing.mwst_betrag || pricing.vat_amount || 0), type: 'vat' },
+    { product: 'Gesamt brutto', uvpGross: formatPriceInput(pricing.gesamt_uvp_brutto || pricing.uvpGross || 0), offerGross: formatPriceInput(pricing.gesamt_angebot_brutto || run.summary?.totalGross || 0), type: 'gross' }
   );
   return rows;
 }
@@ -1056,8 +1072,8 @@ function buildEditedDraftPayload(form) {
     rows: Array.from(form.querySelectorAll('[data-price-row]')).map((row) => ({
       type: row.dataset.rowType || '',
       product: row.querySelector('[data-price-field="product"]').value,
-      uvp: row.querySelector('[data-price-field="uvp"]').value,
-      offer: row.querySelector('[data-price-field="offer"]').value
+      uvp: draftMailPriceValue(row, 'uvp'),
+      offer: draftMailPriceValue(row, 'offer')
     })),
     notes: form.querySelector('[data-draft-field="notes"]').value,
     signature: form.querySelector('[data-draft-field="signature"]').value,
@@ -1073,6 +1089,15 @@ function syncDraftPreview(form) {
 }
 
 function handleDraftTableClick(event, form) {
+  const toggleButton = event.target.closest('[data-toggle-price-mode]');
+  if (toggleButton) {
+    const row = toggleButton.closest('[data-price-row]');
+    toggleDraftPriceMode(row);
+    recalculateDraftTotals(form);
+    syncDraftPreview(form);
+    return;
+  }
+
   const deleteButton = event.target.closest('[data-delete-draft-row]');
   if (deleteButton) {
     const row = deleteButton.closest('[data-price-row]');
@@ -1097,33 +1122,105 @@ function addDraftItemRow(form) {
   const template = document.createElement('template');
   template.innerHTML = draftPriceRowHtml({
     product: '',
-    uvp: formatMoney(0),
-    offer: formatMoney(0),
-    type: 'item'
+    uvpNet: formatPriceInput(0),
+    uvpGross: formatPriceInput(0),
+    offerNet: formatPriceInput(0),
+    offerGross: formatPriceInput(0),
+    type: 'item',
+    inputMode: 'gross'
   }).trim();
   tbody.insertBefore(template.content.firstElementChild, firstCalculatedRow);
+}
+
+function handleDraftReviewInput(event, form) {
+  const input = event.target.closest('[data-price-field]');
+  if (input && input.dataset.priceField !== 'product') {
+    sanitizeMoneyInput(input);
+    const row = input.closest('[data-price-row]');
+    if (row && !row.hasAttribute('data-calculated-row')) {
+      const fieldBase = input.dataset.priceField.startsWith('uvp') ? 'uvp' : 'offer';
+      const source = input.dataset.priceField.endsWith('Net') ? 'net' : 'gross';
+      syncGrossNetPair(row, fieldBase, source);
+    }
+  }
+  recalculateDraftTotals(form);
+  syncDraftPreview(form);
+}
+
+function toggleDraftPriceMode(row) {
+  if (!row || row.hasAttribute('data-calculated-row')) return;
+  const nextMode = row.dataset.priceMode === 'net' ? 'gross' : 'net';
+  row.dataset.priceMode = nextMode;
+  row.querySelector('[data-toggle-price-mode]').textContent = nextMode === 'net' ? 'Brutto eingeben' : 'Netto eingeben';
+  setPriceReadonly(row, 'uvpNet', nextMode !== 'net');
+  setPriceReadonly(row, 'offerNet', nextMode !== 'net');
+  setPriceReadonly(row, 'uvpGross', nextMode !== 'gross');
+  setPriceReadonly(row, 'offerGross', nextMode !== 'gross');
+}
+
+function setPriceReadonly(row, field, readonly) {
+  const input = row.querySelector(`[data-price-field="${field}"]`);
+  if (!input) return;
+  input.readOnly = readonly;
+  input.setAttribute('aria-readonly', String(readonly));
+}
+
+function sanitizeMoneyInput(input) {
+  input.value = input.value.replace(/[^\d,.]/g, '');
+}
+
+function syncGrossNetPair(row, fieldBase, source) {
+  const netInput = row.querySelector(`[data-price-field="${fieldBase}Net"]`);
+  const grossInput = row.querySelector(`[data-price-field="${fieldBase}Gross"]`);
+  if (!netInput || !grossInput) return;
+  if (source === 'net') {
+    grossInput.value = formatPriceInput(parseMoney(netInput.value) * 1.2);
+  } else {
+    netInput.value = formatPriceInput(parseMoney(grossInput.value) / 1.2);
+  }
 }
 
 function recalculateDraftTotals(form) {
   const itemRows = Array.from(form.querySelectorAll('[data-price-row]'))
     .filter((row) => !row.hasAttribute('data-calculated-row'));
-  const uvpGross = itemRows.reduce((sum, row) => sum + parseMoney(row.querySelector('[data-price-field="uvp"]').value), 0);
-  const offerGross = itemRows.reduce((sum, row) => sum + parseMoney(row.querySelector('[data-price-field="offer"]').value), 0);
-  setDraftCalculatedRow(form, 'total', uvpGross / 1.2, offerGross / 1.2);
-  setDraftCalculatedRow(form, 'vat', uvpGross - uvpGross / 1.2, offerGross - offerGross / 1.2);
-  setDraftCalculatedRow(form, 'gross', uvpGross, offerGross);
+  const uvpGross = itemRows.reduce((sum, row) => sum + parseMoney(row.querySelector('[data-price-field="uvpGross"]').value), 0);
+  const offerGross = itemRows.reduce((sum, row) => sum + parseMoney(row.querySelector('[data-price-field="offerGross"]').value), 0);
+  const uvpNet = uvpGross / 1.2;
+  const offerNet = offerGross / 1.2;
+  setDraftCalculatedRow(form, 'total', { uvpNet, uvpGross: '', offerNet, offerGross: '' });
+  setDraftCalculatedRow(form, 'vat', {
+    uvpNet: '',
+    uvpGross: formatPriceInput(uvpGross - uvpNet),
+    offerNet: '',
+    offerGross: formatPriceInput(offerGross - offerNet)
+  });
+  setDraftCalculatedRow(form, 'gross', {
+    uvpNet: '',
+    uvpGross: formatPriceInput(uvpGross),
+    offerNet: '',
+    offerGross: formatPriceInput(offerGross)
+  });
 }
 
-function setDraftCalculatedRow(form, rowType, uvp, offer) {
+function setDraftCalculatedRow(form, rowType, values) {
   const row = form.querySelector(`[data-row-type="${rowType}"]`);
   if (!row) return;
-  row.querySelector('[data-price-field="uvp"]').value = formatMoney(uvp);
-  row.querySelector('[data-price-field="offer"]').value = formatMoney(offer);
+  for (const [field, value] of Object.entries(values)) {
+    const input = row.querySelector(`[data-price-field="${field}"]`);
+    if (input) input.value = value === '' ? '' : formatPriceInput(value);
+  }
+}
+
+function draftMailPriceValue(row, fieldBase) {
+  if (row.dataset.rowType === 'total') {
+    return row.querySelector(`[data-price-field="${fieldBase}Net"]`)?.value || '';
+  }
+  return row.querySelector(`[data-price-field="${fieldBase}Gross"]`)?.value || '';
 }
 
 function parseMoney(value) {
   const normalized = String(value || '')
-    .replace(/[^\d,.-]/g, '')
+    .replace(/[^\d,.]/g, '')
     .replace(/\./g, '')
     .replace(',', '.');
   const parsed = Number.parseFloat(normalized);
@@ -1232,6 +1329,13 @@ function setStatus(message) {
 
 function formatMoney(value) {
   return new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(Number(value || 0));
+}
+
+function formatPriceInput(value) {
+  return new Intl.NumberFormat('de-AT', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(Number(value || 0));
 }
 
 function formatDateTime(value) {

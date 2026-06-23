@@ -965,10 +965,14 @@ iframe {
   text-align: left;
 }
 
-.editable-price-table th:nth-child(2),
 .editable-price-table th:nth-child(3),
-.editable-price-table td:nth-child(2),
-.editable-price-table td:nth-child(3) {
+.editable-price-table th:nth-child(4),
+.editable-price-table th:nth-child(5),
+.editable-price-table th:nth-child(6),
+.editable-price-table td:nth-child(3),
+.editable-price-table td:nth-child(4),
+.editable-price-table td:nth-child(5),
+.editable-price-table td:nth-child(6) {
   text-align: right;
 }
 
@@ -988,6 +992,18 @@ iframe {
 .editable-price-table input:focus {
   outline: 2px solid #111827;
   outline-offset: -2px;
+}
+
+.editable-price-table input[readonly] {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.editable-price-row.total input[readonly],
+.editable-price-row.vat input[readonly],
+.editable-price-row.gross input[readonly] {
+  background: transparent;
+  color: inherit;
 }
 
 .editable-price-row.item {
@@ -1018,9 +1034,32 @@ iframe {
   font-size: 16px;
 }
 
-.editable-price-row td:nth-child(3) input {
+.editable-price-row td:nth-child(5) input,
+.editable-price-row td:nth-child(6) input {
   color: #c00000;
   font-weight: 700;
+}
+
+.price-mode-label,
+.price-mode-toggle {
+  display: block;
+  font-size: 12px;
+  padding: 8px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.price-mode-toggle {
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  color: #111827;
+  cursor: pointer;
+  width: 100%;
+}
+
+.price-mode-toggle:hover {
+  background: #f3f4f6;
 }
 
 .row-delete {
