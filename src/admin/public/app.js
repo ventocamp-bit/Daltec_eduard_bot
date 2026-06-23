@@ -49,11 +49,9 @@ const productGroupsEl = document.querySelector('#product-groups');
 const addProductGroupButton = document.querySelector('#add-product-group');
 const priceRulesEl = document.querySelector('#price-rules');
 const addPriceRuleButton = document.querySelector('#add-price-rule');
-const reviewPriceInputModeInputs = Array.from(document.querySelectorAll('[name="reviewPriceInputMode"]'));
 const navButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
 const panelViews = Array.from(document.querySelectorAll('.panel-view'));
 const contentShell = document.querySelector('.content-shell');
-const PRICE_INPUT_MODE_STORAGE_KEY = 'eduard:review-price-input-mode';
 let currentSettings = {};
 let activeDraftPreviewForm = null;
 
@@ -82,7 +80,6 @@ productGroupsEl.addEventListener('click', removeProductGroup);
 priceRulesEl.addEventListener('input', () => schedulePreview());
 priceRulesEl.addEventListener('change', () => schedulePreview());
 priceRulesEl.addEventListener('click', removePriceRule);
-reviewPriceInputModeInputs.forEach((input) => input.addEventListener('change', handleReviewPriceInputModeChange));
 loginForm.addEventListener('submit', login);
 form.addEventListener('input', () => schedulePreview());
 form.addEventListener('change', () => schedulePreview());
@@ -103,7 +100,6 @@ function activatePanel(panelId) {
 async function boot() {
   hideLocalLoginInProduction();
   hideLegacyCategoryDiscountInputs();
-  initializeReviewPriceInputMode();
   try {
     await request('/api/auth/me');
     showApp();
@@ -124,28 +120,6 @@ function hideLocalLoginInProduction() {
   if (localLoginEl && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
     localLoginEl.hidden = true;
   }
-}
-
-function initializeReviewPriceInputMode() {
-  const mode = reviewPriceInputMode();
-  reviewPriceInputModeInputs.forEach((input) => {
-    input.checked = input.value === mode;
-  });
-}
-
-function handleReviewPriceInputModeChange(event) {
-  const mode = event.target.value === 'net' ? 'net' : 'gross';
-  localStorage.setItem(PRICE_INPUT_MODE_STORAGE_KEY, mode);
-  initializeReviewPriceInputMode();
-  if (activeDraftPreviewForm) {
-    applyDraftPriceInputMode(activeDraftPreviewForm, mode);
-    recalculateDraftTotals(activeDraftPreviewForm);
-    syncDraftPreview(activeDraftPreviewForm);
-  }
-}
-
-function reviewPriceInputMode() {
-  return localStorage.getItem(PRICE_INPUT_MODE_STORAGE_KEY) === 'net' ? 'net' : 'gross';
 }
 
 async function login(event) {
@@ -796,9 +770,9 @@ async function renderRunDetail(runId, options = {}) {
       form.addEventListener('click', (event) => handleDraftTableClick(event, form));
     }
     recalculateDraftTotals(form);
-    previewFrame.srcdoc = draftOriginalHtml(run) || buildEditedDraftPayload(form).html;
-    previewStateLabel.textContent = 'HTML';
-    setStatus('Original Draft Vorschau geladen');
+    previewFrame.srcdoc = buildEditedDraftPayload(form).html;
+    previewStateLabel.textContent = 'Draft';
+    setStatus('Draft Vorschau geladen');
   }
   if (!options.readOnly) {
     runDetailBodyEl.querySelector('[data-reject-draft]')?.addEventListener('click', () => rejectDraft(run.id));
@@ -812,7 +786,6 @@ function runDetailHtml(run, options = {}) {
   const testMode = isOnboardingTestRun(run);
   const disabled = readOnly ? ' disabled' : '';
   const sendDisabled = testMode ? ' disabled' : '';
-  const priceInputMode = reviewPriceInputMode();
   return `
     <form class="draft-review" data-draft-review-form>
       <div class="draft-review-head">
@@ -845,14 +818,13 @@ function runDetailHtml(run, options = {}) {
           <thead>
             <tr>
               <th>Position</th>
-              <th>UVP netto</th>
-              <th>UVP brutto</th>
-              <th>Angebot netto</th>
-              <th>Angebot brutto</th>
+              <th>UVP Netto</th>
+              <th>Rabatt</th>
+              <th>Angebot Netto</th>
             </tr>
           </thead>
           <tbody>
-          ${draft.rows.map((row) => draftPriceRowHtml(row, { readOnly, inputMode: priceInputMode })).join('')}
+          ${draft.rows.map((row) => draftPriceRowHtml(row, { readOnly })).join('')}
           </tbody>
         </table>
         <button type="button" class="secondary add-draft-row" data-add-draft-row${readOnly ? ' hidden' : ''}>+ Zeile hinzuf&uuml;gen</button>
@@ -894,21 +866,18 @@ function customerEmailCopyBannerHtml(email) {
 
 function draftPriceRowHtml(row, options = {}) {
   const calculated = ['total', 'vat', 'gross'].includes(row.type);
-  const mode = options.inputMode === 'net' ? 'net' : 'gross';
   const rowLocked = calculated || options.readOnly;
   const productReadonly = rowLocked ? ' readonly aria-readonly="true"' : '';
-  const netReadonly = rowLocked || mode !== 'net' ? ' readonly aria-readonly="true"' : '';
-  const grossReadonly = rowLocked || mode !== 'gross' ? ' readonly aria-readonly="true"' : '';
+  const valueReadonly = rowLocked ? ' readonly aria-readonly="true"' : '';
   const deleteButton = !calculated && !options.readOnly
     ? '<button type="button" class="row-delete" data-delete-draft-row aria-label="Zeile löschen">×</button>'
     : '';
   return `
-    <tr class="editable-price-row ${escapeHtml(row.type || 'item')}" data-price-row data-row-type="${escapeHtml(row.type || 'item')}" data-price-mode="${mode}"${calculated ? ' data-calculated-row' : ''}>
+    <tr class="editable-price-row ${escapeHtml(row.type || 'item')}" data-price-row data-row-type="${escapeHtml(row.type || 'item')}"${calculated ? ' data-calculated-row' : ''}>
       <td><input data-price-field="product" type="text" value="${escapeHtml(row.product)}"${productReadonly}>${deleteButton}</td>
-      <td><span class="price-field-label">Netto</span><input data-price-field="uvpNet" type="text" inputmode="decimal" value="${escapeHtml(row.uvpNet || '')}"${netReadonly}></td>
-      <td><span class="price-field-label">Brutto</span><input data-price-field="uvpGross" type="text" inputmode="decimal" value="${escapeHtml(row.uvpGross || row.uvp)}"${grossReadonly}></td>
-      <td><span class="price-field-label">Netto</span><input data-price-field="offerNet" type="text" inputmode="decimal" value="${escapeHtml(row.offerNet || '')}"${netReadonly}></td>
-      <td><span class="price-field-label">Brutto</span><input data-price-field="offerGross" type="text" inputmode="decimal" value="${escapeHtml(row.offerGross || row.offer)}"${grossReadonly}></td>
+      <td><input data-price-field="uvpNet" type="text" inputmode="decimal" value="${escapeHtml(row.uvpNet || '')}"${valueReadonly}></td>
+      <td><input data-price-field="discount" type="text" value="${escapeHtml(row.discount || '')}" readonly aria-readonly="true"></td>
+      <td><input data-price-field="offerNet" type="text" inputmode="decimal" value="${escapeHtml(row.offerNet || '')}"${valueReadonly}></td>
     </tr>
   `;
 }
@@ -1033,26 +1002,31 @@ function draftRows(run) {
   const items = Array.isArray(run.line_items_json) ? run.line_items_json : [];
   const positions = Array.isArray(pricing.positionen) ? pricing.positionen : [];
   const rows = positions.length
-    ? positions.map((position) => ({
-      product: position.produkt_name || 'Produkt',
-      uvpNet: formatPriceInput(Number(position.uvp_netto || 0)),
-      uvpGross: formatPriceInput(Number(position.uvp_netto || 0) * 1.2),
-      offerNet: formatPriceInput(Number(position.angebot_netto || 0)),
-      offerGross: formatPriceInput(Number(position.angebot_netto || 0) * 1.2),
-      type: 'item'
-    }))
-    : items.map((item) => ({
-      product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
-      uvpNet: formatPriceInput((item.preis_mail_brutto_num || item.price || 0) / 1.2),
-      uvpGross: formatPriceInput(item.preis_mail_brutto_num || item.price || 0),
-      offerNet: formatPriceInput((item.preis_mail_brutto_num || item.price || 0) / 1.2),
-      offerGross: formatPriceInput(item.preis_mail_brutto_num || item.price || 0),
-      type: 'item'
-    }));
+    ? positions.map((position) => {
+      const uvpNet = Number(position.uvp_netto || 0);
+      const offerNet = Number(position.angebot_netto || 0);
+      return {
+        product: position.produkt_name || 'Produkt',
+        uvpNet: formatPriceInput(uvpNet),
+        discount: formatPriceInput(uvpNet - offerNet),
+        offerNet: formatPriceInput(offerNet),
+        type: 'item'
+      };
+    })
+    : items.map((item) => {
+      const net = Number(item.preis_mail_brutto_num || item.price || 0) / 1.2;
+      return {
+        product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
+        uvpNet: formatPriceInput(net),
+        discount: formatPriceInput(0),
+        offerNet: formatPriceInput(net),
+        type: 'item'
+      };
+    });
   rows.push(
-    { product: 'Gesamt netto', uvpNet: formatPriceInput(pricing.gesamt_uvp_netto || pricing.totalUvpNet || 0), offerNet: formatPriceInput(pricing.gesamt_angebot_netto || 0), type: 'total' },
-    { product: '20% MwSt', uvpGross: '', offerGross: formatPriceInput(pricing.mwst_betrag || pricing.vat_amount || 0), type: 'vat' },
-    { product: 'Gesamt brutto', uvpGross: formatPriceInput(pricing.gesamt_uvp_brutto || pricing.uvpGross || 0), offerGross: formatPriceInput(pricing.gesamt_angebot_brutto || run.summary?.totalGross || 0), type: 'gross' }
+    { product: 'Gesamt netto', uvpNet: formatPriceInput(0), discount: formatPriceInput(0), offerNet: formatPriceInput(0), type: 'total' },
+    { product: '20% MwSt', uvpNet: formatPriceInput(0), discount: formatPriceInput(0), offerNet: formatPriceInput(0), type: 'vat' },
+    { product: 'Gesamt Brutto (inkl. MwSt.)', uvpNet: formatPriceInput(0), discount: formatPriceInput(0), offerNet: formatPriceInput(0), type: 'gross' }
   );
   return rows;
 }
@@ -1106,6 +1080,7 @@ function buildEditedDraftPayload(form) {
       type: row.dataset.rowType || '',
       product: row.querySelector('[data-price-field="product"]').value,
       uvp: draftMailPriceValue(row, 'uvp'),
+      discount: draftMailPriceValue(row, 'discount'),
       offer: draftMailPriceValue(row, 'offer')
     })),
     notes: form.querySelector('[data-draft-field="notes"]').value,
@@ -1185,11 +1160,10 @@ function addDraftItemRow(form) {
   template.innerHTML = draftPriceRowHtml({
     product: '',
     uvpNet: formatPriceInput(0),
-    uvpGross: formatPriceInput(0),
+    discount: formatPriceInput(0),
     offerNet: formatPriceInput(0),
-    offerGross: formatPriceInput(0),
     type: 'item'
-  }, { inputMode: reviewPriceInputMode() }).trim();
+  }).trim();
   tbody.insertBefore(template.content.firstElementChild, firstCalculatedRow);
 }
 
@@ -1197,70 +1171,40 @@ function handleDraftReviewInput(event, form) {
   const input = event.target.closest('[data-price-field]');
   if (input && input.dataset.priceField !== 'product') {
     sanitizeMoneyInput(input);
-    const row = input.closest('[data-price-row]');
-    if (row && !row.hasAttribute('data-calculated-row')) {
-      const fieldBase = input.dataset.priceField.startsWith('uvp') ? 'uvp' : 'offer';
-      const source = input.dataset.priceField.endsWith('Net') ? 'net' : 'gross';
-      syncGrossNetPair(row, fieldBase, source);
-    }
   }
   recalculateDraftTotals(form);
   syncDraftPreview(form);
-}
-
-function setPriceReadonly(row, field, readonly) {
-  const input = row.querySelector(`[data-price-field="${field}"]`);
-  if (!input) return;
-  input.readOnly = readonly;
-  input.setAttribute('aria-readonly', String(readonly));
-}
-
-function applyDraftPriceInputMode(form, mode = reviewPriceInputMode()) {
-  Array.from(form.querySelectorAll('[data-price-row]'))
-    .filter((row) => !row.hasAttribute('data-calculated-row'))
-    .forEach((row) => {
-      row.dataset.priceMode = mode;
-      setPriceReadonly(row, 'uvpNet', mode !== 'net');
-      setPriceReadonly(row, 'offerNet', mode !== 'net');
-      setPriceReadonly(row, 'uvpGross', mode !== 'gross');
-      setPriceReadonly(row, 'offerGross', mode !== 'gross');
-    });
 }
 
 function sanitizeMoneyInput(input) {
   input.value = input.value.replace(/[^\d,.]/g, '');
 }
 
-function syncGrossNetPair(row, fieldBase, source) {
-  const netInput = row.querySelector(`[data-price-field="${fieldBase}Net"]`);
-  const grossInput = row.querySelector(`[data-price-field="${fieldBase}Gross"]`);
-  if (!netInput || !grossInput) return;
-  if (source === 'net') {
-    grossInput.value = formatPriceInput(parseMoney(netInput.value) * 1.2);
-  } else {
-    netInput.value = formatPriceInput(parseMoney(grossInput.value) / 1.2);
-  }
-}
-
 function recalculateDraftTotals(form) {
   const itemRows = Array.from(form.querySelectorAll('[data-price-row]'))
     .filter((row) => !row.hasAttribute('data-calculated-row'));
-  const uvpGross = itemRows.reduce((sum, row) => sum + parseMoney(row.querySelector('[data-price-field="uvpGross"]').value), 0);
-  const offerGross = itemRows.reduce((sum, row) => sum + parseMoney(row.querySelector('[data-price-field="offerGross"]').value), 0);
-  const uvpNet = uvpGross / 1.2;
-  const offerNet = offerGross / 1.2;
-  setDraftCalculatedRow(form, 'total', { uvpNet, uvpGross: '', offerNet, offerGross: '' });
+  const totals = itemRows.reduce((sum, row) => {
+    const uvpNet = parseMoney(row.querySelector('[data-price-field="uvpNet"]')?.value) || 0;
+    const offerNet = parseMoney(row.querySelector('[data-price-field="offerNet"]')?.value) || 0;
+    const discount = uvpNet - offerNet;
+    const discountInput = row.querySelector('[data-price-field="discount"]');
+    if (discountInput) discountInput.value = formatPriceInput(discount);
+    return {
+      uvpNet: sum.uvpNet + uvpNet,
+      discount: sum.discount + discount,
+      offerNet: sum.offerNet + offerNet
+    };
+  }, { uvpNet: 0, discount: 0, offerNet: 0 });
+  setDraftCalculatedRow(form, 'total', totals);
   setDraftCalculatedRow(form, 'vat', {
-    uvpNet: '',
-    uvpGross: formatPriceInput(uvpGross - uvpNet),
-    offerNet: '',
-    offerGross: formatPriceInput(offerGross - offerNet)
+    uvpNet: totals.uvpNet * 0.2,
+    discount: totals.discount * 0.2,
+    offerNet: totals.offerNet * 0.2
   });
   setDraftCalculatedRow(form, 'gross', {
-    uvpNet: '',
-    uvpGross: formatPriceInput(uvpGross),
-    offerNet: '',
-    offerGross: formatPriceInput(offerGross)
+    uvpNet: totals.uvpNet * 1.2,
+    discount: totals.discount * 1.2,
+    offerNet: totals.offerNet * 1.2
   });
 }
 
@@ -1274,10 +1218,9 @@ function setDraftCalculatedRow(form, rowType, values) {
 }
 
 function draftMailPriceValue(row, fieldBase) {
-  if (row.dataset.rowType === 'total') {
-    return row.querySelector(`[data-price-field="${fieldBase}Net"]`)?.value || '';
-  }
-  return row.querySelector(`[data-price-field="${fieldBase}Gross"]`)?.value || '';
+  const field = { uvp: 'uvpNet', discount: 'discount', offer: 'offerNet' }[fieldBase];
+  const value = row.querySelector(`[data-price-field="${field}"]`)?.value || '';
+  return formatMoney(parseMoney(value) || 0);
 }
 
 function parseMoney(value) {
@@ -1285,8 +1228,7 @@ function parseMoney(value) {
     .replace(/[^\d,.]/g, '')
     .replace(/\./g, '')
     .replace(',', '.');
-  const parsed = Number.parseFloat(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
+  return Number.parseFloat(normalized) || 0;
 }
 
 function debugMetric(label, value) {
