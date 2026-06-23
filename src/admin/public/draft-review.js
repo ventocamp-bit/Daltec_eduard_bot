@@ -1,15 +1,15 @@
 export function buildEditedDraftHtml({ intro = '', rows = [], notes = '', signature = '', settings = {} }) {
   const bodyRows = rows.map((row) => {
     if (row.type === 'section') {
-      return `<tr style="background:#FFC000;font-weight:bold;color:#000;"><td colspan="3" style="border:1px solid #000;padding:8px;">${escapeHtml(row.product)}</td></tr>`;
+      return `<tr style="background:#FFC000;font-weight:bold;color:#000;"><td colspan="4" style="border:1px solid #000;padding:8px;">${escapeHtml(row.product)}</td></tr>`;
     }
     const rowStyle = row.type === 'gross'
       ? 'background:#FFC000;font-weight:bold;color:#000;font-size:16px;'
       : row.type === 'total'
         ? 'background:#f9f9f9;font-weight:bold;border-top:2px solid #000;'
         : 'background:#fff;color:#000;';
-    const offerStyle = 'color:#c00000;font-weight:bold;';
-    return `<tr style="${rowStyle}"><td style="border:1px solid #000;padding:8px;">${escapeHtml(row.product)}</td><td style="border:1px solid #000;padding:8px;text-align:right;">${escapeHtml(row.uvp)}</td><td style="border:1px solid #000;padding:8px;text-align:right;${offerStyle}">${escapeHtml(row.offer)}</td></tr>`;
+    const discountStyle = 'color:#c00000;font-weight:bold;';
+    return `<tr style="${rowStyle}"><td style="border:1px solid #000;padding:8px;">${escapeHtml(row.product)}</td><td style="border:1px solid #000;padding:8px;text-align:right;">${escapeHtml(row.uvp)}</td><td style="border:1px solid #000;padding:8px;text-align:right;${discountStyle}">${escapeHtml(row.discount)}</td><td style="border:1px solid #000;padding:8px;text-align:right;">${escapeHtml(row.offer)}</td></tr>`;
   }).join('');
   return `
     <div style="width:100%;text-align:center;background-color:#ffffff;padding:20px 0;">
@@ -18,8 +18,9 @@ export function buildEditedDraftHtml({ intro = '', rows = [], notes = '', signat
         <thead>
           <tr style="background:#FFC000;font-weight:bold;color:#000;">
             <th style="border:1px solid #000;padding:8px;text-align:left;">Position</th>
-            <th style="border:1px solid #000;padding:8px;text-align:right;">UVP brutto</th>
-            <th style="border:1px solid #000;padding:8px;text-align:right;">Angebot brutto</th>
+            <th style="border:1px solid #000;padding:8px;text-align:right;">UVP Netto</th>
+            <th style="border:1px solid #000;padding:8px;text-align:right;">Rabatt</th>
+            <th style="border:1px solid #000;padding:8px;text-align:right;">Angebot Netto</th>
           </tr>
         </thead>
         <tbody>${bodyRows}</tbody>

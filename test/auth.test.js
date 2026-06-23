@@ -379,16 +379,21 @@ test('review draft html composer preserves n8n table styling and edited prices',
   const html = buildEditedDraftHtml({
     intro: 'Sehr geehrter Herr Test,\n\nvielen Dank.',
     rows: [
-      { product: 'Geänderter Hochlader', uvp: '€ 3.600,00', discount: '€ 410,00', offer: '€ 3.190,00' },
-      { product: 'Gesamt netto', uvp: '€ 3.000,00', discount: '€ 341,67', offer: '€ 2.658,33', type: 'total' },
-      { product: 'Gesamt brutto', uvp: '€ 3.600,00', discount: '€ 410,00', offer: '€ 3.190,00', type: 'gross' }
+      { product: 'Geänderter Hochlader', uvp: '€ 2.720,83', discount: '€ 345,83', offer: '€ 2.375,00' },
+      { product: 'Gesamt netto', uvp: '€ 2.720,83', discount: '€ 345,83', offer: '€ 2.375,00', type: 'total' },
+      { product: '20% Mehrwertsteuer', uvp: '€ 544,17', discount: '€ 69,17', offer: '€ 475,00', type: 'vat' },
+      { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '€ 3.265,00', discount: '€ 415,00', offer: '€ 2.850,00', type: 'gross' }
     ],
     notes: 'Bearbeiteter Hinweis',
     signature: 'Beste Grüße\nLukas'
   });
 
   assert.match(html, /Geänderter Hochlader/);
-  assert.match(html, /€ 3\.190,00/);
+  assert.match(html, /€ 2\.850,00/);
+  assert.match(html, /UVP Netto/);
+  assert.match(html, /Rabatt/);
+  assert.match(html, /Angebot Netto/);
+  assert.doesNotMatch(html, /UVP brutto|Angebot brutto/);
   assert.match(html, /border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;color:#000;width:100%/);
   assert.match(html, /background:#FFC000;font-weight:bold;color:#000/);
   assert.match(html, /border:1px solid #000/);
@@ -397,6 +402,18 @@ test('review draft html composer preserves n8n table styling and edited prices',
   assert.match(html, /font-family:Arial,sans-serif;font-size:14px/);
   assert.match(html, /Bearbeiteter Hinweis/);
   assert.match(html, /border:1px solid #ccc;background:#f9f9f9;padding:20px/);
+});
+
+test('review draft html composer never renders NaN for empty price fields', () => {
+  const html = buildEditedDraftHtml({
+    rows: [
+      { product: 'Leer', uvp: '', discount: '', offer: '' },
+      { product: 'Gesamt netto', uvp: '€ 0,00', discount: '€ 0,00', offer: '€ 0,00', type: 'total' },
+      { product: '20% Mehrwertsteuer', uvp: '€ 0,00', discount: '€ 0,00', offer: '€ 0,00', type: 'vat' },
+      { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '€ 0,00', discount: '€ 0,00', offer: '€ 0,00', type: 'gross' }
+    ]
+  });
+  assert.doesNotMatch(html, /NaN/);
 });
 
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
@@ -412,7 +429,9 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(stylesSource, /border: 1px solid #bbb/);
   assert.match(stylesSource, /user-select: all/);
   assert.match(appSource, /data-draft-field="subject" type="text" value="\$\{escapeHtml\(draft\.subject\)\}"/);
-  assert.match(appSource, /data-price-field="offerGross" type="text" inputmode="decimal" value="\$\{escapeHtml\(row\.offerGross \|\| row\.offer\)\}"/);
+  assert.match(appSource, /data-price-field="offerNet" type="text" inputmode="decimal"/);
+  assert.match(appSource, /data-price-field="discount" type="text"/);
+  assert.match(appSource, /parseMoney\(.*\) \|\| 0/);
   assert.match(appSource, /<table class="editable-price-table" data-draft-table>/);
   assert.match(appSource, /recalculateDraftTotals\(form\)/);
   assert.match(appSource, /data-calculated-row/);
@@ -420,16 +439,15 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /data-delete-draft-row/);
   assert.match(appSource, /data-add-draft-row/);
   assert.match(appSource, /addDraftItemRow\(form\)/);
-  assert.match(appSource, /previewFrame\.srcdoc = draftOriginalHtml\(run\) \|\| buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /button\.textContent = 'Sendet\.\.\.'/);
   assert.match(appSource, /draft-message ok/);
   assert.match(appSource, /send-to-customer/);
   assert.match(appSource, /form\.addEventListener\('input', \(event\) => handleDraftReviewInput\(event, form\)\)/);
   assert.match(appSource, /sanitizeMoneyInput\(input\)/);
-  assert.match(appSource, /syncGrossNetPair\(row, fieldBase, source\)/);
-  assert.match(appSource, /data-toggle-price-mode/);
+  assert.doesNotMatch(appSource, /syncGrossNetPair\(row, fieldBase, source\)/);
+  assert.doesNotMatch(appSource, /data-toggle-price-mode/);
   assert.match(appSource, /data-price-field="offerNet"/);
-  assert.match(appSource, /data-price-field="uvpGross"/);
+  assert.doesNotMatch(appSource, /data-price-field="uvpGross"/);
   assert.match(appSource, /readonly aria-readonly="true"/);
   assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);

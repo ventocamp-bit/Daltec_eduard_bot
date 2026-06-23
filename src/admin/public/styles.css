@@ -994,14 +994,12 @@ iframe {
   text-align: left;
 }
 
+.editable-price-table th:nth-child(2),
 .editable-price-table th:nth-child(3),
 .editable-price-table th:nth-child(4),
-.editable-price-table th:nth-child(5),
-.editable-price-table th:nth-child(6),
+.editable-price-table td:nth-child(2),
 .editable-price-table td:nth-child(3),
-.editable-price-table td:nth-child(4),
-.editable-price-table td:nth-child(5),
-.editable-price-table td:nth-child(6) {
+.editable-price-table td:nth-child(4) {
   text-align: right;
 }
 
@@ -1063,32 +1061,9 @@ iframe {
   font-size: 16px;
 }
 
-.editable-price-row td:nth-child(5) input,
-.editable-price-row td:nth-child(6) input {
+.editable-price-row td:nth-child(3) input {
   color: #c00000;
   font-weight: 700;
-}
-
-.price-mode-label,
-.price-mode-toggle {
-  display: block;
-  font-size: 12px;
-  padding: 8px;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.price-mode-toggle {
-  background: #fff;
-  border: 0;
-  border-radius: 0;
-  color: #111827;
-  cursor: pointer;
-  width: 100%;
-}
-
-.price-mode-toggle:hover {
-  background: #f3f4f6;
 }
 
 .row-delete {
