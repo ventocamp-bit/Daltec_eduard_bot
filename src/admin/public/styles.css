@@ -543,6 +543,86 @@ iframe {
   gap: 7px;
 }
 
+.review-flags {
+  background: #fffbeb;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.4;
+  padding: 9px;
+}
+
+.original-mail {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 9px;
+}
+
+.original-mail summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.original-mail pre {
+  color: #374151;
+  font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 10px 0 0;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.history-list {
+  padding: 12px;
+}
+
+.history-table {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  overflow: hidden;
+}
+
+.history-row {
+  align-items: center;
+  background: #fff;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text);
+  display: grid;
+  font: inherit;
+  gap: 10px;
+  grid-template-columns: 1.1fr 1.2fr 1.7fr .8fr .8fr;
+  min-height: 42px;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.history-row:last-child {
+  border-bottom: 0;
+}
+
+.history-row:not(.history-head) {
+  cursor: pointer;
+}
+
+.history-row:not(.history-head):hover {
+  background: var(--surface-soft);
+}
+
+.history-head {
+  background: var(--surface-soft);
+  color: var(--muted);
+  cursor: default;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .compact-buttons {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -799,6 +879,16 @@ iframe {
 
 .run-status.failed_retryable,
 .run-status.failed_terminal {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.run-status.sent_to_customer {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.run-status.rejected {
   background: #fee2e2;
   color: #991b1b;
 }

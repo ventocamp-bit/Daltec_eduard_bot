@@ -233,6 +233,7 @@ export async function recordOwnerFeedback(runId, payload = {}, context = {}) {
     created_at: new Date().toISOString()
   };
   const updated = await updateOfferRun(runId, {
+    ...(rating === 'rejected' ? { status: 'rejected' } : {}),
     owner_feedback: feedback,
     summary: {
       ...(run.summary || {}),
