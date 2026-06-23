@@ -500,6 +500,10 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);
   assert.match(appSource, /data-draft-extra-tables/);
+  assert.match(appSource, /data-inventory-alternative-toggle/);
+  assert.match(appSource, /editable_offer/);
+  assert.match(appSource, /\/editable-offer/);
+  assert.match(appSource, /if \(toggle && !toggle\.checked\) return \[\]/);
   assert.match(appSource, /draftExtraTables\(run\)/);
   assert.match(appSource, /match\.hasInventoryMatch === true/);
   assert.match(appSource, /match\.topInventoryName/);
@@ -600,6 +604,16 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     assert.equal(missingHtml.status, 400);
     assert.deepEqual(await missingHtml.json(), { ok: false, error: 'html_required' });
 
+    const editableOffer = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/editable-offer`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ editable_offer: { inventory_alternative: { enabled: false } } })
+    });
+    assert.equal(editableOffer.status, 200);
+    const editableOfferBody = await editableOffer.json();
+    assert.equal(editableOfferBody.ok, true);
+    assert.equal(editableOfferBody.editable_offer.inventory_alternative.enabled, false);
+
     const editedHtml = [
       '<div style="font-family:Arial;font-size:14px;">',
       '<p>Sehr geehrte Frau Kunde, hier ist das bearbeitete Angebot.</p>',
@@ -627,6 +641,7 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     assert.equal(sentMails[0].to, 'edited@example.at');
     assert.equal(sentMails[0].subject, 'Bearbeitetes Eduard Angebot');
     assert.match(sentMails[0].html, /Bearbeiteter Hochlader/);
+    assert.equal((sentMails[0].html.match(/<table/g) || []).length, 1);
     assert.match(sentMails[0].html, /Hinweis nach Bearbeitung/);
     assert.match(sentMails[0].html, /Beste Grüße/);
 
@@ -635,7 +650,9 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     });
     const detailBody = await detail.json();
     assert.equal(detailBody.status, 'sent_to_customer');
+    assert.equal(detailBody.summary.editable_offer.inventory_alternative.enabled, false);
     assert.equal(detailBody.events.some((event) => event.event_type === 'sent_to_customer'), true);
+    assert.equal(detailBody.events.some((event) => event.event_type === 'editable_offer_updated'), true);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

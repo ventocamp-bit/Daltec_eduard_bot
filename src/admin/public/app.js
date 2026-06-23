@@ -763,9 +763,12 @@ async function renderRunDetail(runId, options = {}) {
     if (!options.readOnly) {
       form.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
       form.addEventListener('input', (event) => handleDraftReviewInput(event, form));
-      form.addEventListener('change', () => {
+      form.addEventListener('change', (event) => {
         recalculateDraftTotals(form);
         syncDraftPreview(form);
+        if (event.target.matches('[data-inventory-alternative-toggle]')) {
+          saveEditableOfferState(run.id, form).catch((error) => showDraftError(form, error.message));
+        }
       });
       form.addEventListener('click', (event) => handleDraftTableClick(event, form));
     }
@@ -829,6 +832,7 @@ function runDetailHtml(run, options = {}) {
         </table>
         <button type="button" class="secondary add-draft-row" data-add-draft-row${readOnly ? ' hidden' : ''}>+ Zeile hinzuf&uuml;gen</button>
       </section>
+      ${inventoryAlternativeToggleHtml(draft, { readOnly })}
       <script type="application/json" data-draft-extra-tables>${jsonScriptContent(draft.extraTables)}</script>
 
       <section class="draft-section">
@@ -890,13 +894,17 @@ function draftReviewState(run) {
   const to = run.draft?.customer_email || run.summary?.customerEmail || customer.email || '';
   const subject = run.draft?.subject || run.draft_subject || `Ihr Eduard Angebot${customerName ? ` - ${customerName}` : ''}`;
   const paragraphs = draftParagraphs(run.draft?.html_body || run.draft_html || '');
+  const extraTables = draftExtraTables(run);
+  const inventoryAlternativeEnabled = run.summary?.editable_offer?.inventory_alternative?.enabled !== false;
   return {
     customerName,
     to,
     subject,
     intro: paragraphs[0] || defaultIntro(customerName),
     rows: draftRows(run),
-    extraTables: draftExtraTables(run),
+    extraTables,
+    inventoryAlternativeAvailable: extraTables.length > 0,
+    inventoryAlternativeEnabled,
     notes: draftNotesFromHtml(draftOriginalHtml(run)),
     signature: paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})
   };
@@ -1047,6 +1055,18 @@ function draftExtraTables(run) {
   }];
 }
 
+function inventoryAlternativeToggleHtml(draft, options = {}) {
+  if (!draft.inventoryAlternativeAvailable) return '';
+  const checked = draft.inventoryAlternativeEnabled ? ' checked' : '';
+  const disabled = options.readOnly ? ' disabled' : '';
+  return `
+    <label class="draft-toggle">
+      <input type="checkbox" data-inventory-alternative-toggle${checked}${disabled}>
+      Lager-Alternative anzeigen
+    </label>
+  `;
+}
+
 function draftRowsFromCalc(calc = {}) {
   const positions = Array.isArray(calc.positionen) ? calc.positionen : [];
   const rows = positions.map((position) => {
@@ -1134,7 +1154,7 @@ function buildEditedDraftPayload(form) {
     signature: form.querySelector('[data-draft-field="signature"]').value,
     settings: currentSettings
   });
-  return { to, subject, html };
+  return { to, subject, html, editable_offer: editableOfferPayloadFromForm(form) };
 }
 
 function syncDraftPreview(form) {
@@ -1144,6 +1164,8 @@ function syncDraftPreview(form) {
 }
 
 function draftExtraTablesFromForm(form) {
+  const toggle = form.querySelector('[data-inventory-alternative-toggle]');
+  if (toggle && !toggle.checked) return [];
   const source = form.querySelector('[data-draft-extra-tables]')?.textContent || '[]';
   try {
     const tables = JSON.parse(source);
@@ -1155,6 +1177,31 @@ function draftExtraTablesFromForm(form) {
 
 function jsonScriptContent(value) {
   return JSON.stringify(value || []).replace(/</g, '\\u003c');
+}
+
+function editableOfferPayloadFromForm(form) {
+  const toggle = form.querySelector('[data-inventory-alternative-toggle]');
+  return {
+    inventory_alternative: {
+      enabled: toggle ? toggle.checked : true
+    }
+  };
+}
+
+async function saveEditableOfferState(runId, form) {
+  const result = await request(`/api/offer-runs/${encodeURIComponent(runId)}/editable-offer`, {
+    method: 'PATCH',
+    body: JSON.stringify({ editable_offer: editableOfferPayloadFromForm(form) })
+  });
+  return result.editable_offer;
+}
+
+function showDraftError(form, message) {
+  const element = form.querySelector('[data-draft-message]');
+  if (!element) return;
+  element.hidden = false;
+  element.className = 'draft-message error';
+  element.textContent = message;
 }
 
 function handleDraftTableClick(event, form) {

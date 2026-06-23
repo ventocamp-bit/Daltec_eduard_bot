@@ -725,7 +725,8 @@ export function createAdminApp(options = {}) {
       summary: {
         ...(run.summary || {}),
         customerEmail: draft.to,
-        customerSentAt: sentAt
+        customerSentAt: sentAt,
+        editable_offer: draft.editable_offer || run.summary?.editable_offer || null
       }
     }, req.tenantContext);
     await appendOfferRunEvent(run.id, {
@@ -734,6 +735,31 @@ export function createAdminApp(options = {}) {
       metadata: { to: draft.to, subject: draft.subject, provider: runtime.provider || 'unknown' }
     }, req.tenantContext);
     res.json({ ok: true, sent_at: sentAt });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ ok: false, error: error.message });
+  }
+  });
+
+  app.patch('/api/offer-runs/:id/editable-offer', async (req, res) => {
+  try {
+    const run = await loadOfferRun(req.params.id, req.tenantContext);
+    if (!run) {
+      res.status(404).json({ ok: false, error: 'run_not_found' });
+      return;
+    }
+    const editableOffer = normalizeEditableOffer(req.body?.editable_offer || req.body || {});
+    const updated = await updateOfferRun(run.id, {
+      summary: {
+        ...(run.summary || {}),
+        editable_offer: editableOffer
+      }
+    }, req.tenantContext);
+    await appendOfferRunEvent(run.id, {
+      event_type: 'editable_offer_updated',
+      message: 'Editable offer settings updated',
+      metadata: { editable_offer: editableOffer }
+    }, req.tenantContext);
+    res.json({ ok: true, editable_offer: updated.summary?.editable_offer || editableOffer });
   } catch (error) {
     res.status(error.statusCode || 500).json({ ok: false, error: error.message });
   }
@@ -1461,7 +1487,21 @@ function normalizeCustomerSendPayload(input = {}) {
     error.statusCode = 400;
     throw error;
   }
-  return { to, subject, html };
+  return {
+    to,
+    subject,
+    html,
+    editable_offer: Object.hasOwn(input, 'editable_offer') ? normalizeEditableOffer(input.editable_offer || {}) : null
+  };
+}
+
+function normalizeEditableOffer(input = {}) {
+  const inventoryInput = input.inventory_alternative || {};
+  return {
+    inventory_alternative: {
+      enabled: inventoryInput.enabled !== false
+    }
+  };
 }
 
 function reviewQueueItem(run) {
