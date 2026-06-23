@@ -798,8 +798,11 @@ async function openRunFromList(event) {
 
 async function renderRunDetail(runId, options = {}) {
   setStatus('Lade Draft Review...');
-  const run = await request(`/api/offer-runs/${encodeURIComponent(runId)}`);
-  runDetailBodyEl.innerHTML = runDetailHtml(run, options);
+  const [run, reviewState] = await Promise.all([
+    request(`/api/offer-runs/${encodeURIComponent(runId)}`),
+    request(`/api/offer-runs/${encodeURIComponent(runId)}/review-state`)
+  ]);
+  runDetailBodyEl.innerHTML = runDetailHtml(run, { ...options, reviewState });
   runDetailEl.hidden = false;
   runDetailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const form = runDetailBodyEl.querySelector('[data-draft-review-form]');
@@ -825,13 +828,13 @@ async function renderRunDetail(runId, options = {}) {
 }
 
 function runDetailHtml(run, options = {}) {
-  const draft = draftReviewState(run);
+  const draft = options.reviewState || draftReviewState(run);
   const readOnly = options.readOnly === true;
   const testMode = isOnboardingTestRun(run);
   const disabled = readOnly ? ' disabled' : '';
   const sendDisabled = testMode ? ' disabled' : '';
   return `
-    <form class="draft-review" data-draft-review-form data-run-id="${escapeHtml(run.id)}" data-editable-offer-version="${Number(run.summary?.editable_offer_version || 1)}">
+    <form class="draft-review" data-draft-review-form data-run-id="${escapeHtml(run.id)}" data-editable-offer-version="${Number(draft.version || run.summary?.editable_offer_version || 1)}">
       <div class="draft-review-head">
         <div>
           <p class="eyebrow">${readOnly ? 'Verlauf' : 'Draft Review'}</p>

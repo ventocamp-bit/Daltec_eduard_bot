@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
-import test from 'node:test';
+import test, { it } from 'node:test';
 import { createPasswordHash, verifyPassword } from '../src/auth.js';
 import { createAdminApp } from '../src/admin/server.js';
 import { buildEditedDraftHtml } from '../src/admin/public/draft-review.js';
@@ -17,6 +17,9 @@ import {
 import { createFeedbackToken } from '../src/feedback-token.js';
 import { inspectRuntimeReadiness } from '../src/production-readiness.js';
 import { checkEditableOfferConsistency } from '../src/core/editable-offer.js';
+import { loadSettings, saveSettings } from '../src/settings.js';
+import { processOfferRun } from '../src/offer-run-service.js';
+import { ingestInboundMessage, loadOfferRun, updateOfferRun } from '../src/storage.js';
 
 test('password hashes verify only the original password', () => {
   const hash = createPasswordHash('secret-pass');
@@ -538,6 +541,7 @@ test('review preview with upsell renders two pricing tables from same mail html 
 });
 
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
+  const serverSource = await fs.readFile(path.join('src', 'admin', 'server.js'), 'utf8');
   const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
   const htmlSource = await fs.readFile(path.join('src', 'admin', 'public', 'index.html'), 'utf8');
   const stylesSource = await fs.readFile(path.join('src', 'admin', 'public', 'styles.css'), 'utf8');
@@ -601,7 +605,12 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.doesNotMatch(appSource, /buildEditedDraftHtml/);
   assert.doesNotMatch(appSource, /function mailInputFromEditableOffer\(editableOffer\)/);
   assert.doesNotMatch(appSource, /previewFrame\\.srcdoc = buildEditedDraftPayload\\(form\\)\\.html/);
+  assert.match(appSource, /\/api\/offer-runs\/\$\{encodeURIComponent\(runId\)\}\/review-state/);
+  assert.match(appSource, /const draft = options\.reviewState \|\| draftReviewState\(run\)/);
+  assert.match(appSource, /previewFrame\.srcdoc = result\.html/);
   assert.match(appSource, /\/render-editable-offer/);
+  assert.match(serverSource, /app\.get\('\/api\/offer-runs\/:id\/review-state'/);
+  assert.match(serverSource, /buildReviewStateForRun\(run\)/);
   assert.match(appSource, /editableOfferRenderSequence/);
   assert.match(appSource, /request\(`\/api\/offer-runs\/\$\{encodeURIComponent\(runId\)\}\/send-to-customer`/);
   assert.match(htmlSource, /id="inbound-status-list"/);
@@ -626,6 +635,94 @@ test('onboarding source wires production self-service steps', async () => {
   assert.match(jsSource, /onboarding_test/);
   assert.match(appSource, /isOnboardingTestRun/);
   assert.match(appSource, /Senden ist deaktiviert/);
+});
+
+test('legacy run without editable offer exposes review-state fallback', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret: 'editable-seed-session-secret',
+      cookieName: 'editable_seed_session',
+      secureCookie: false
+    }
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'owner@example.com', password: 'secret-pass' })
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie');
+    const leadToken = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const inbound = await fetch(`${baseUrl}/api/inbound/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        provider: 'gmail',
+        provider_message_id: `editable-seed-${leadToken}`,
+        subject: 'Eduard Anfrage',
+        from_email: `kunde-${leadToken}@example.at`,
+        received_at: new Date().toISOString(),
+        raw_html: `
+          <table>
+            <tr><td><strong>Vorname</strong></td><td>Eva</td></tr>
+            <tr><td><strong>Nachname</strong></td><td>Seed</td></tr>
+            <tr><td><strong>E-mail-Adresse</strong></td><td>seed-${leadToken}@example.at</td></tr>
+            <tr><td>Hochlader 3318 3500kg</td><td>&euro; 3.000,00</td></tr>
+          </table>`
+      })
+    });
+    assert.equal(inbound.status, 201);
+    const inboundBody = await inbound.json();
+
+    const processed = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/process`, {
+      method: 'POST',
+      headers: { Cookie: cookie }
+    });
+    assert.equal(processed.status, 200);
+
+    const detail = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(detail.status, 200);
+    const detailBody = await detail.json();
+
+    const legacySummary = { ...detailBody.summary };
+    delete legacySummary.editable_offer;
+    await updateOfferRun(inboundBody.offer_run_id, { summary: legacySummary }, { tenantId: 'daltec-local' });
+
+    const legacyDetail = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(legacyDetail.status, 200);
+    const legacyDetailBody = await legacyDetail.json();
+    assert.equal(legacyDetailBody.summary.editable_offer, undefined);
+
+    const reviewState = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/review-state`, {
+      headers: { Cookie: cookie }
+    });
+    const body = await reviewState.json();
+    assert.equal(reviewState.status, 200, JSON.stringify(body));
+    assert.equal(body.ok, true);
+    assert.equal(body.version, 1);
+    assert.equal(body.to, `seed-${leadToken}@example.at`);
+    assert.match(body.subject, /Eduard Angebot/);
+    assert.equal(typeof body.intro, 'string');
+    assert.equal(typeof body.notes, 'string');
+    assert.equal(typeof body.signature, 'string');
+    assert.ok(Array.isArray(body.rows));
+    assert.ok(body.rows.length > 0);
+    assert.ok(Array.isArray(body.extra_tables));
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
 
 test.skip('review send-to-customer endpoint validates sends edited draft and marks run sent', async () => {
@@ -1228,5 +1325,80 @@ test.skip('admin API requires login session', async () => {
     if (previousIngestSecret === undefined) delete process.env.EDUARD_INGEST_SECRET;
     else process.env.EDUARD_INGEST_SECRET = previousIngestSecret;
     await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+it("should seed editable offer from tenant mail defaults and maintain snapshot stability", async () => {
+  const tenantId = `seed-proof-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const baseDir = path.join('data', 'tenants', tenantId);
+  const context = {
+    tenantId,
+    baseDir,
+    settingsPath: path.join(baseDir, 'settings.json'),
+    tenantPath: path.join(baseDir, 'tenant.json'),
+    offersPath: path.join(baseDir, 'offers.jsonl'),
+    inventoryPath: path.join(baseDir, 'lager.csv'),
+    mailConnectionsPath: path.join(baseDir, 'mail-connections.json')
+  };
+
+  try {
+    await fs.mkdir(baseDir, { recursive: true });
+    await fs.writeFile(context.inventoryPath, [
+      'Lager;Art.-Nr.;Art.-Bez.;Lagermenge;Lagerwert;Länge;Breite;hzGGew',
+      '1;3318-4-P3-3563;Hochlader 330x180x30 3500kg;1;3000;3300;1800;3500'
+    ].join('\n'), 'utf8');
+    await saveSettings({
+      mail_defaults: {
+        introTemplate: 'DALTEC-GOLD-INTRO',
+        defaultNotes: 'DALTEC-GOLD-NOTES',
+        signature: 'DALTEC-GOLD-SIGNATURE',
+        showInventoryAlternativeDefault: false
+      }
+    }, context);
+
+    const inbound = await ingestInboundMessage({
+      provider: 'gmail',
+      provider_message_id: `seed-proof-${tenantId}`,
+      subject: 'Eduard Anfrage',
+      from_email: 'kunde-seed-proof@example.at',
+      received_at: new Date().toISOString(),
+      raw_html: `
+        <table>
+          <tr><td><strong>Vorname</strong></td><td>Eva</td></tr>
+          <tr><td><strong>Nachname</strong></td><td>Seedproof</td></tr>
+          <tr><td><strong>E-mail-Adresse</strong></td><td>seedproof@example.at</td></tr>
+          <tr><td>Hochlader 3318 3500kg</td><td>&euro; 3.000,00</td></tr>
+        </table>`
+    }, context);
+
+    const processed = await processOfferRun(inbound.run.id, context);
+    assert.notEqual(processed.status, 'failed_retryable');
+
+    const seededRun = await loadOfferRun(inbound.run.id, context);
+    assert.equal(seededRun.summary.editable_offer.intro, 'DALTEC-GOLD-INTRO');
+    assert.equal(seededRun.summary.editable_offer.notes, 'DALTEC-GOLD-NOTES');
+    assert.equal(seededRun.summary.editable_offer.signature, 'DALTEC-GOLD-SIGNATURE');
+    assert.equal(seededRun.summary.editable_offer.inventory_alternative.enabled, false);
+    assert.equal(seededRun.summary.editable_offer_version, 1);
+
+    await saveSettings({
+      mail_defaults: {
+        introTemplate: 'NEUER-TEXT',
+        defaultNotes: 'NEUE-NOTES',
+        signature: 'NEUE-SIGNATURE',
+        showInventoryAlternativeDefault: true
+      }
+    }, context);
+    const changedSettings = await loadSettings(context);
+    assert.equal(changedSettings.mail_defaults.introTemplate, 'NEUER-TEXT');
+
+    const stableRun = await loadOfferRun(inbound.run.id, context);
+    assert.equal(stableRun.summary.editable_offer.intro, 'DALTEC-GOLD-INTRO');
+    assert.equal(stableRun.summary.editable_offer.notes, 'DALTEC-GOLD-NOTES');
+    assert.equal(stableRun.summary.editable_offer.signature, 'DALTEC-GOLD-SIGNATURE');
+    assert.equal(stableRun.summary.editable_offer.inventory_alternative.enabled, false);
+    assert.equal(stableRun.summary.editable_offer_version, 1);
+  } finally {
+    await fs.rm(baseDir, { recursive: true, force: true });
   }
 });

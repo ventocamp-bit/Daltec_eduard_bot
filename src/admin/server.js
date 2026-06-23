@@ -698,6 +698,22 @@ export function createAdminApp(options = {}) {
   }
   });
 
+  app.get('/api/offer-runs/:id/review-state', async (req, res, next) => {
+  try {
+    const run = await loadOfferRun(req.params.id, req.tenantContext);
+    if (!run) {
+      res.status(404).json({ ok: false, error: 'run_not_found' });
+      return;
+    }
+    res.json({
+      ok: true,
+      ...buildReviewStateForRun(run)
+    });
+  } catch (error) {
+    next(error);
+  }
+  });
+
   app.get('/api/offer-runs/:id', async (req, res, next) => {
   try {
     const run = await loadOfferRun(req.params.id, req.tenantContext);
@@ -848,6 +864,7 @@ export function createAdminApp(options = {}) {
         ok: true,
         html: rendered.html,
         normalized_editable_offer: rendered.normalized_editable_offer,
+        review_state: rendered.review_state,
         summary: rendered.summary
       });
     } catch (error) {
@@ -1675,11 +1692,134 @@ function renderEditableOfferForRun(run, editableOfferInput = {}) {
   return {
     html: renderEditableOfferHtml(state),
     normalized_editable_offer: state.editable_offer,
+    review_state: buildReviewStateForRun(run, state),
     summary: {
       tableCount: inventory.enabled ? 2 : 1,
       inventorySource: inventory.enabled ? inventory.active_source || null : null,
       inventoryHeading: inventory.enabled ? inventory.heading || null : null
     }
+  };
+}
+
+function buildReviewStateForRun(run, state = buildEditableOfferState(run, { editable_offer: run.summary?.editable_offer || {} })) {
+  const customer = run.customer_json || {};
+  const customerName = run.summary?.customerName || [customer.first_name, customer.last_name].filter(Boolean).join(' ');
+  const inventory = state.tables.inventory_alternative || {};
+  const editableOffer = state.editable_offer || {};
+  const extraTables = inventory.enabled && inventory.table ? [reviewExtraTableFromRenderTable(inventory.table)] : [];
+  const inventoryAlternative = editableOffer.inventory_alternative || {};
+  const to = editableOffer.to || state.recipient.to || run.summary?.customerEmail || customer.email || run.draft?.customer_email || '';
+  const subject = editableOffer.subject || state.recipient.subject || run.draft?.subject || run.draft_subject || '';
+  const rows = Array.isArray(editableOffer.rows) && editableOffer.rows.length
+    ? editableOffer.rows
+    : (state.tables.requested?.rows || []).map(reviewRowFromRenderRow);
+  return {
+    customerName,
+    to,
+    subject,
+    intro: state.content.intro || '',
+    notes: state.content.notes || '',
+    signature: state.content.signature || '',
+    rows: rows.length ? rows : reviewRowsFromRun(run),
+    extra_tables: extraTables,
+    extraTables,
+    baseExtraTables: extraTables,
+    inventoryReplacement: reviewInventoryReplacement(inventoryAlternative.replacement),
+    version: Number(run.summary?.editable_offer_version || 1),
+    catalog: reviewCatalogFromRun(run),
+    inventoryAlternativeAvailable: inventory.suggested === true || Boolean(inventory.table),
+    inventoryAlternativeEnabled: inventory.enabled === true,
+    inventoryAlternativeName: inventory.source?.top_lager_name || inventory.table?.intro?.replace(/^Passendes Lagerfahrzeug:\s*/, '') || ''
+  };
+}
+
+function reviewInventoryReplacement(input = {}) {
+  return {
+    enabled: input?.enabled === true,
+    inventory_sku: String(input?.inventory_sku || '').trim(),
+    inventory_name: String(input?.inventory_name || '').trim(),
+    reason: String(input?.reason || '').trim()
+  };
+}
+
+function reviewExtraTableFromRenderTable(table) {
+  return {
+    title: table.title || '',
+    intro: table.intro || '',
+    rows: (table.rows || []).map((row) => ({
+      product: row.product || '',
+      uvp: row.uvp || '',
+      discount: row.discount || '',
+      offer: row.offer || '',
+      type: row.type || 'item'
+    }))
+  };
+}
+
+function reviewRowFromRenderRow(row) {
+  return {
+    type: row.type || 'item',
+    product: row.product || '',
+    uvpNet: reviewPriceInput(row.uvp),
+    discount: reviewPriceInput(row.discount),
+    offerNet: reviewPriceInput(row.offer)
+  };
+}
+
+function reviewRowsFromRun(run) {
+  const pricing = run.pricing_json || {};
+  const positions = Array.isArray(pricing.positionen) ? pricing.positionen : [];
+  const lineItems = Array.isArray(run.line_items_json) ? run.line_items_json : [];
+  const rows = positions.length
+    ? positions.map((position) => {
+      const uvpNet = Number(position.uvp_netto || 0);
+      const offerNet = Number(position.angebot_netto || 0);
+      return {
+        type: 'item',
+        product: position.produkt_name || 'Produkt',
+        uvpNet: formatReviewPriceInput(uvpNet),
+        discount: formatReviewPriceInput(uvpNet - offerNet),
+        offerNet: formatReviewPriceInput(offerNet)
+      };
+    })
+    : lineItems.map((item) => {
+      const net = Number(item.preis_mail_brutto_num || item.price || 0) / 1.2;
+      return {
+        type: 'item',
+        product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
+        uvpNet: formatReviewPriceInput(net),
+        discount: formatReviewPriceInput(0),
+        offerNet: formatReviewPriceInput(net)
+      };
+    });
+  rows.push(
+    { type: 'total', product: 'Gesamt netto', uvpNet: '0,00', discount: '0,00', offerNet: '0,00' },
+    { type: 'vat', product: '20% MwSt', uvpNet: '0,00', discount: '0,00', offerNet: '0,00' },
+    { type: 'gross', product: 'Gesamt Brutto (inkl. MwSt.)', uvpNet: '0,00', discount: '0,00', offerNet: '0,00' }
+  );
+  return rows;
+}
+
+function formatReviewPriceInput(value) {
+  return new Intl.NumberFormat('de-AT', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(Number(value || 0));
+}
+
+function reviewPriceInput(value) {
+  return String(value || '').replace(/[^\d,.-]/g, '').trim();
+}
+
+function reviewCatalogFromRun(run) {
+  const pricing = run.pricing_json || {};
+  const first = Array.isArray(pricing.positionen) ? pricing.positionen[0] : null;
+  const match = run.match_json || {};
+  return {
+    product: first?.produkt_name || run.line_items_json?.[0]?.produkt_name_original || '',
+    family: first?.product_family || '',
+    sku: first?.produktcode || run.line_items_json?.[0]?.artikelnummer || '',
+    inventory: match.top_lager_name || match.topInventoryName || ''
   };
 }
 
