@@ -11,6 +11,7 @@ const pageStatus = document.querySelector('#onboarding-status');
 const mailChecks = document.querySelector('#mail-checks');
 const finalChecks = document.querySelector('#final-checks');
 const refreshButton = document.querySelector('#refresh-status');
+const simulateTestRunButton = document.querySelector('#simulate-test-run');
 const mailTabs = [...document.querySelectorAll('[data-mail-tab]')];
 const mailPanels = [...document.querySelectorAll('[data-mail-panel]')];
 const imapForm = document.querySelector('#imap-form');
@@ -24,12 +25,6 @@ const CSV_HEADER_ALIASES = {
   stockValue: ['Lagerwert', 'EK', 'Einkaufspreis', 'Bruttopreis (Konfigurator)']
 };
 const CSV_REQUIRED_FIELDS = ['sku', 'name', 'stock', 'stockValue'];
-const SAMPLE_CSV = [
-  'Lager;Art.-Nr.;Art.-Bez.;Lagermenge;Lagerwert;Länge;Breite;hzGGew',
-  'Harmannsdorf;3318-4-P3-3563;Hochlader 330x180x30 3500kg H=63cm;1;3600;330;180;3500',
-  'Harmannsdorf;3118-4-13-3063-N;Rückwärtskipper 311x180x30 3000kg H=63cm EP+N;1;5200;311;180;3000',
-  'Harmannsdorf;4022-4-AO3-3563-J;Autotransporter 406x220x30 3500kg H=63cm Rampen HP;1;6100;406;220;3500'
-].join('\n');
 
 let currentStep = 0;
 let tenant = null;
@@ -53,6 +48,7 @@ saveDealerButton.addEventListener('click', saveDealer);
 uploadButton.addEventListener('click', uploadCsv);
 uploadInput.addEventListener('change', validateSelectedCsv);
 refreshButton.addEventListener('click', refresh);
+simulateTestRunButton.addEventListener('click', simulateTestRun);
 connectImapButton.addEventListener('click', connectImap);
 mailTabs.forEach((tab) => {
   tab.addEventListener('click', () => showMailTab(tab.dataset.mailTab));
@@ -142,9 +138,53 @@ async function uploadCsv() {
   if (!response.ok) {
     throw new Error(payload.message || payload.error || 'CSV Upload fehlgeschlagen');
   }
-  uploadStatus.textContent = `CSV gespeichert. ${payload.validation?.stats?.rowCount || 0} Zeilen geprüft.`;
+  const articleCount = inventoryArticleCountFromPayload(payload);
+  localStorage.setItem(inventoryCountStorageKey(), String(articleCount));
+  uploadStatus.textContent = `✅ ${articleCount} Artikel im Lager`;
   await refresh();
   showStep(3);
+}
+
+async function simulateTestRun() {
+  simulateTestRunButton.disabled = true;
+  simulateTestRunButton.textContent = 'Draft wird erstellt...';
+  setPageStatus('Test-Anfrage wird verarbeitet...');
+  try {
+    const inbound = await request('/api/inbound/email', {
+      method: 'POST',
+      body: JSON.stringify({
+        provider: 'onboarding_test',
+        provider_message_id: `onboarding-test-${Date.now()}`,
+        subject: 'Eduard Anfrage TEST',
+        from_email: 'testkunde@example.com',
+        received_at: new Date().toISOString(),
+        raw_html: [
+          '<table>',
+          '<tr><td><strong>Vorname</strong></td><td>Max</td></tr>',
+          '<tr><td><strong>Nachname</strong></td><td>Mustermann</td></tr>',
+          '<tr><td><strong>E-mail-Adresse</strong></td><td>testkunde@example.com</td></tr>',
+          '<tr><td>Hochlader 3318 3500kg</td><td>&euro; 3.000,00</td></tr>',
+          '<tr><td>COC & Typisierung</td><td>&euro; 200,00</td></tr>',
+          '</table>'
+        ].join(''),
+        raw_text: [
+          'Vorname Max',
+          'Nachname Mustermann',
+          'E-mail-Adresse testkunde@example.com',
+          'Hochlader 3318 3500kg EUR 3.000,00',
+          'COC & Typisierung EUR 200,00'
+        ].join('\n')
+      })
+    });
+    if (inbound.offer_run_id) {
+      await request(`/api/offer-runs/${encodeURIComponent(inbound.offer_run_id)}/process`, { method: 'POST' });
+    }
+    window.location.href = '/';
+  } catch (error) {
+    simulateTestRunButton.disabled = false;
+    simulateTestRunButton.textContent = 'Ersten Draft simulieren →';
+    handleError(error);
+  }
 }
 
 async function connectImap() {
@@ -207,8 +247,7 @@ function hideImapResult() {
 }
 
 function initSampleCsvDownload() {
-  const blob = new Blob([SAMPLE_CSV], { type: 'text/csv;charset=utf-8' });
-  sampleCsvDownload.href = URL.createObjectURL(blob);
+  sampleCsvDownload.href = '/api/sample-csv';
 }
 
 async function validateSelectedCsv() {
@@ -355,14 +394,44 @@ function isPositiveEuroNumber(value) {
   return Number.parseFloat(normalized) > 0;
 }
 
+function mailConnectionDetail() {
+  if (mailStatus?.gmail?.connected) {
+    return `✅ Gmail verbunden: ${mailStatus.gmail.email || 'verbunden'}`;
+  }
+  if (mailStatus?.outlook?.connected) {
+    return `✅ Outlook verbunden: ${mailStatus.outlook.email || 'verbunden'}`;
+  }
+  return 'Noch nicht verbunden';
+}
+
+function inventoryArticleCountFromPayload(payload = {}) {
+  return Number(payload.validation?.stats?.rows || payload.validation?.stats?.rowCount || payload.validation?.rowCount || 0);
+}
+
+function inventoryCountStorageKey() {
+  return `eduard:onboarding:${tenant?.id || 'default'}:inventory-count`;
+}
+
+function inventoryStatusText() {
+  const count = Number(localStorage.getItem(inventoryCountStorageKey()) || 0);
+  return count > 0 ? `✅ ${count} Artikel im Lager` : 'Lager-CSV vorhanden';
+}
+
+function updateUploadStatus(csvLoaded) {
+  if (!csvLoaded || uploadInput.files?.length) return;
+  uploadStatus.textContent = inventoryStatusText();
+}
+
 function renderStatus() {
   const gmailConnected = Boolean(mailStatus?.gmail?.connected || mailStatus?.outlook?.connected);
   const csvLoaded = Boolean(dataStatus?.lagerCsvExists);
   const dealerReady = Boolean(tenant?.name);
+  const mailDetail = mailConnectionDetail();
+  updateUploadStatus(csvLoaded);
   const checks = [
     { label: 'Händlerdaten', done: dealerReady, detail: tenant?.name || 'Noch nicht gespeichert' },
-    { label: 'Gmail OAuth', done: gmailConnected, detail: gmailConnected ? 'Mailzugriff verbunden' : 'Noch nicht verbunden' },
-    { label: 'CSV Upload', done: csvLoaded, detail: csvLoaded ? 'Lager-CSV vorhanden' : 'Noch keine CSV geladen' }
+    { label: 'Gmail OAuth', done: gmailConnected, detail: gmailConnected ? mailDetail : 'Noch nicht verbunden' },
+    { label: 'CSV Upload', done: csvLoaded, detail: csvLoaded ? inventoryStatusText() : 'Noch keine CSV geladen' }
   ];
 
   for (const [index, tab] of tabs.entries()) {
@@ -371,7 +440,7 @@ function renderStatus() {
   }
 
   mailChecks.innerHTML = [
-    checkRow('Google OAuth', gmailConnected, gmailConnected ? 'Verbunden' : 'Noch offen'),
+    checkRow('Google OAuth', gmailConnected, gmailConnected ? mailDetail : 'Noch offen'),
     checkRow('Nächster Schritt', true, 'Nach der Verbindung zurück zu /onboarding')
   ].join('');
   finalChecks.innerHTML = [

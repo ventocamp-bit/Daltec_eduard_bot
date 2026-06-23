@@ -289,7 +289,7 @@ export function createAdminApp(options = {}) {
   app.get('/api/oauth/google/callback', async (req, res, next) => {
   try {
     await completeGoogleConnect(loadConfig(), req.query.code, req.query.state, auth.sessionSecret);
-    res.redirect('/?mail_connected=gmail');
+    res.redirect('/onboarding?mail_connected=gmail');
   } catch (error) {
     next(error);
   }

@@ -401,9 +401,18 @@ test('review draft html composer preserves n8n table styling and edited prices',
 
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
   const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
+  const stylesSource = await fs.readFile(path.join('src', 'admin', 'public', 'styles.css'), 'utf8');
   assert.match(appSource, /data-draft-field="to" type="email" value="\$\{escapeHtml\(draft\.to\)\}"/);
+  assert.match(appSource, /data-copy-customer-email/);
+  assert.match(appSource, /navigator\.clipboard\.writeText\(text\)/);
+  assert.match(appSource, /document\.execCommand\('copy'\)/);
+  assert.match(appSource, /Kopiert!/);
+  assert.match(stylesSource, /\.customer-email-copy/);
+  assert.match(stylesSource, /background: #f4f4f4/);
+  assert.match(stylesSource, /border: 1px solid #bbb/);
+  assert.match(stylesSource, /user-select: all/);
   assert.match(appSource, /data-draft-field="subject" type="text" value="\$\{escapeHtml\(draft\.subject\)\}"/);
-  assert.match(appSource, /data-price-field="offer" type="text" value="\$\{escapeHtml\(row\.offer\)\}"/);
+  assert.match(appSource, /data-price-field="offerGross" type="text" inputmode="decimal" value="\$\{escapeHtml\(row\.offerGross \|\| row\.offer\)\}"/);
   assert.match(appSource, /<table class="editable-price-table" data-draft-table>/);
   assert.match(appSource, /recalculateDraftTotals\(form\)/);
   assert.match(appSource, /data-calculated-row/);
@@ -415,10 +424,32 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /button\.textContent = 'Sendet\.\.\.'/);
   assert.match(appSource, /draft-message ok/);
   assert.match(appSource, /send-to-customer/);
-  assert.match(appSource, /form\.addEventListener\('input', \(\) => \{/);
-  assert.match(appSource, /recalculateDraftTotals\(form\);\s+syncDraftPreview\(form\);/);
+  assert.match(appSource, /form\.addEventListener\('input', \(event\) => handleDraftReviewInput\(event, form\)\)/);
+  assert.match(appSource, /sanitizeMoneyInput\(input\)/);
+  assert.match(appSource, /syncGrossNetPair\(row, fieldBase, source\)/);
+  assert.match(appSource, /data-toggle-price-mode/);
+  assert.match(appSource, /data-price-field="offerNet"/);
+  assert.match(appSource, /data-price-field="uvpGross"/);
+  assert.match(appSource, /readonly aria-readonly="true"/);
   assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);
+});
+
+test('onboarding source wires production self-service steps', async () => {
+  const serverSource = await fs.readFile(path.join('src', 'admin', 'server.js'), 'utf8');
+  const htmlSource = await fs.readFile(path.join('src', 'admin', 'public', 'onboarding', 'index.html'), 'utf8');
+  const jsSource = await fs.readFile(path.join('src', 'admin', 'public', 'onboarding', 'onboarding.js'), 'utf8');
+  const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
+
+  assert.match(serverSource, /res\.redirect\('\/onboarding\?mail_connected=gmail'\)/);
+  assert.match(htmlSource, /Eduard-Mails weiterleiten/);
+  assert.match(htmlSource, /Ersten Draft simulieren/);
+  assert.match(jsSource, /sampleCsvDownload\.href = '\/api\/sample-csv'/);
+  assert.match(jsSource, /Gmail verbunden:/);
+  assert.match(jsSource, /\/api\/inbound\/email/);
+  assert.match(jsSource, /onboarding_test/);
+  assert.match(appSource, /isOnboardingTestRun/);
+  assert.match(appSource, /Senden ist deaktiviert/);
 });
 
 test('review send-to-customer endpoint validates sends edited draft and marks run sent', async () => {
