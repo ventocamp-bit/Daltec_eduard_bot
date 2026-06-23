@@ -920,6 +920,35 @@ iframe {
   margin: 0;
 }
 
+.customer-email-copy {
+  align-items: flex-start;
+  background: #f4f4f4;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  color: #111827;
+  cursor: pointer;
+  display: grid;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 700;
+  gap: 4px;
+  padding: 12px 14px;
+  text-align: left;
+  user-select: all;
+  width: 100%;
+}
+
+.customer-email-copy-value {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.customer-email-copy small {
+  color: #4b5563;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .draft-section {
   display: grid;
   gap: 8px;

@@ -800,6 +800,8 @@ function runDetailHtml(run, options = {}) {
       ${testMode ? '<div class="review-flags">Test-Draft aus dem Onboarding - Senden ist deaktiviert.</div>' : ''}
       ${originalMailHtml(run)}
 
+      ${customerEmailCopyBannerHtml(draft.to)}
+
       <div class="inline two">
         <label>An <input data-draft-field="to" type="email" value="${escapeHtml(draft.to)}" required${disabled}></label>
         <label>Betreff <input data-draft-field="subject" type="text" value="${escapeHtml(draft.subject)}" required${disabled}></label>
@@ -851,6 +853,17 @@ function runDetailHtml(run, options = {}) {
 
 function isOnboardingTestRun(run) {
   return run?.inbound_message?.provider === 'onboarding_test';
+}
+
+function customerEmailCopyBannerHtml(email) {
+  const value = String(email || '').trim();
+  if (!value) return '';
+  return `
+    <button type="button" class="customer-email-copy" data-copy-customer-email data-email="${escapeHtml(value)}">
+      <span class="customer-email-copy-value">📋 ${escapeHtml(value)}</span>
+      <small data-copy-label>Klicken zum Kopieren</small>
+    </button>
+  `;
 }
 
 function draftPriceRowHtml(row, options = {}) {
@@ -1089,6 +1102,12 @@ function syncDraftPreview(form) {
 }
 
 function handleDraftTableClick(event, form) {
+  const emailCopyButton = event.target.closest('[data-copy-customer-email]');
+  if (emailCopyButton) {
+    copyCustomerEmail(emailCopyButton);
+    return;
+  }
+
   const toggleButton = event.target.closest('[data-toggle-price-mode]');
   if (toggleButton) {
     const row = toggleButton.closest('[data-price-row]');
@@ -1114,6 +1133,38 @@ function handleDraftTableClick(event, form) {
     recalculateDraftTotals(form);
     syncDraftPreview(form);
   }
+}
+
+async function copyCustomerEmail(button) {
+  const text = button.dataset.email || '';
+  const label = button.querySelector('[data-copy-label]');
+  try {
+    await copyTextToClipboard(text);
+    if (label) {
+      label.textContent = '✅ Kopiert!';
+      setTimeout(() => {
+        label.textContent = 'Klicken zum Kopieren';
+      }, 1500);
+    }
+  } catch (error) {
+    if (label) label.textContent = 'Kopieren fehlgeschlagen';
+  }
+}
+
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  textarea.remove();
 }
 
 function addDraftItemRow(form) {

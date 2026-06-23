@@ -401,11 +401,16 @@ test('review draft html composer preserves n8n table styling and edited prices',
 
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
   const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
+  const stylesSource = await fs.readFile(path.join('src', 'admin', 'public', 'styles.css'), 'utf8');
   assert.match(appSource, /data-draft-field="to" type="email" value="\$\{escapeHtml\(draft\.to\)\}"/);
   assert.match(appSource, /data-copy-customer-email/);
   assert.match(appSource, /navigator\.clipboard\.writeText\(text\)/);
   assert.match(appSource, /document\.execCommand\('copy'\)/);
   assert.match(appSource, /Kopiert!/);
+  assert.match(stylesSource, /\.customer-email-copy/);
+  assert.match(stylesSource, /background: #f4f4f4/);
+  assert.match(stylesSource, /border: 1px solid #bbb/);
+  assert.match(stylesSource, /user-select: all/);
   assert.match(appSource, /data-draft-field="subject" type="text" value="\$\{escapeHtml\(draft\.subject\)\}"/);
   assert.match(appSource, /data-price-field="offerGross" type="text" inputmode="decimal" value="\$\{escapeHtml\(row\.offerGross \|\| row\.offer\)\}"/);
   assert.match(appSource, /<table class="editable-price-table" data-draft-table>/);
