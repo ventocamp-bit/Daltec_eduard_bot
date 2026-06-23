@@ -158,9 +158,9 @@ test('editable offer consistency check uses the same state for review preview an
     },
     match_json: {
       hat_match: true,
-      top_lager_name: '4020-4-PO3-3063',
+      top_lager_name: 'Hochlader 330x180x30 2000kg H=63cm',
       kalkulation_lager: {
-        positionen: [{ produkt_name: '4020-4-PO3-3063 Lagerfahrzeug', uvp_netto: 4200, angebot_netto: 3900 }],
+        positionen: [{ produkt_name: 'Hochlader 330x180x30 2000kg H=63cm (Art.Nr: 3318-4-P3-2063)', uvp_netto: 4200, angebot_netto: 3900 }],
         gesamt_uvp_netto: 4200,
         gesamt_angebot_netto: 3900
       }
@@ -184,6 +184,35 @@ test('editable offer consistency check uses the same state for review preview an
   assert.equal(shown.preview.tableCount, 2);
   assert.equal(shown.mail.tableCount, 2);
   assert.equal(shown.preview.inventoryHeading, 'SOFORT AB LAGER VERFÜGBAR');
+
+  const replaced = checkEditableOfferConsistency({
+    ...run,
+    summary: {
+      ...run.summary,
+      editable_offer: {
+        inventory_alternative: {
+          enabled: true,
+          replacement: {
+            enabled: true,
+            inventory_sku: '4020-4-PO3-3063',
+            inventory_name: 'Hochlader mit Rampen 406x200x30 3000kg H=63cm Rampen',
+            reason: 'Bessere fachliche Alternative mit Rampen'
+          }
+        }
+      }
+    }
+  });
+  assert.equal(replaced.ok, true);
+  assert.equal(replaced.review.inventory_name, 'Hochlader mit Rampen 406x200x30 3000kg H=63cm Rampen');
+  assert.equal(replaced.preview.inventory_name, 'Hochlader mit Rampen 406x200x30 3000kg H=63cm Rampen');
+  assert.equal(replaced.mail.inventory_name, 'Hochlader mit Rampen 406x200x30 3000kg H=63cm Rampen');
+  assert.equal(replaced.review.inventoryModel, 'Hochlader mit Rampen 406x200x30 3000kg H=63cm Rampen (Art.Nr: 4020-4-PO3-3063)');
+  assert.equal(replaced.review.tableCount, 2);
+  assert.equal(replaced.review.inventoryTableCount, 1);
+  assert.equal(replaced.preview.inventoryTableCount, 1);
+  assert.equal(replaced.mail.inventoryTableCount, 1);
+  assert.equal(replaced.preview.originalInventoryStillVisible, false);
+  assert.equal(replaced.mail.originalInventoryStillVisible, false);
 });
 
 test('readiness proof target can be configured by environment', () => {
@@ -551,6 +580,11 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /Dauerhaft anpassbar/);
   assert.match(appSource, /Nur lesend/);
   assert.match(appSource, /data-readonly-source="catalog"/);
+  assert.match(appSource, /Alternative ersetzen/);
+  assert.match(appSource, /data-inventory-replacement-enabled/);
+  assert.match(appSource, /data-inventory-replacement-field="inventory_name"/);
+  assert.match(appSource, /data-inventory-replacement-field="reason"/);
+  assert.match(appSource, /replacementFromForm\(form\)/);
   assert.match(appSource, /to: form\.querySelector\('\[data-draft-field="to"\]'\)\.value\.trim\(\)/);
   assert.match(appSource, /subject: form\.querySelector\('\[data-draft-field="subject"\]'\)\.value\.trim\(\)/);
   assert.match(appSource, /intro: form\.querySelector\('\[data-draft-field="intro"\]'\)\.value/);
@@ -714,7 +748,7 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
       body: JSON.stringify({
         to: 'edited@example.at',
         subject: 'Bearbeitetes Eduard Angebot',
-        html: editedHtml,
+        html: '<p>STALE BODY HTML MUST NOT BE SENT</p>',
         editable_offer: {
           to: 'edited@example.at',
           subject: 'Bearbeitetes Eduard Angebot',
@@ -735,6 +769,7 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     assert.equal(sentMails[0].to, 'edited@example.at');
     assert.equal(sentMails[0].subject, 'Bearbeitetes Eduard Angebot');
     assert.match(sentMails[0].html, /Bearbeiteter Hochlader/);
+    assert.doesNotMatch(sentMails[0].html, /STALE BODY HTML/);
     assert.equal((sentMails[0].html.match(/<table/g) || []).length, 1);
     assert.match(sentMails[0].html, /Hinweis nach Bearbeitung/);
     assert.match(sentMails[0].html, /Beste Grüße/);
@@ -926,7 +961,7 @@ test('admin API requires login session', async () => {
 
     const inboundPayload = {
       provider: 'gmail',
-      provider_message_id: `msg-${Date.now()}`,
+      provider_message_id: `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       subject: 'Eduard Anfrage',
       from_email: 'kunde@testkunde.at',
       received_at: new Date().toISOString(),

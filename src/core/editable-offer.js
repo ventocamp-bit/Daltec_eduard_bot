@@ -1,4 +1,5 @@
 import { buildEditedDraftHtml } from '../admin/public/draft-review.js';
+import { findEduardProductByCode } from './product-catalog.js';
 
 const INVENTORY_HEADING = 'SOFORT AB LAGER VERFÜGBAR';
 
@@ -6,7 +7,8 @@ export const INVENTORY_ALTERNATIVE_RULES = Object.freeze({
   suggestedWhen: 'match_json.hat_match === true or match_json.hasInventoryMatch === true, and match_json.kalkulation_lager has priced rows',
   hideableWhen: 'inventory alternative is suggested',
   ownerOverrideAllowedWhen: 'inventory alternative is suggested',
-  sendFlowRule: 'send-to-customer must use the owner supplied editable_offer or the persisted run.summary.editable_offer; it must not re-enable a hidden inventory alternative'
+  replacementWhen: 'editable_offer.inventory_alternative.enabled === true and editable_offer.inventory_alternative.replacement.enabled === true',
+  sendFlowRule: 'send-to-customer renders from editable_offer when present; disabled alternatives must not re-enable, enabled replacements replace the original inventory alternative'
 });
 
 export function normalizeEditableOffer(input = {}) {
@@ -29,6 +31,7 @@ export function normalizeEditableOffer(input = {}) {
     signature: String(input.signature || ''),
     inventory_alternative: {
       enabled: inventoryInput.enabled !== false,
+      // Wenn replacement.enabled === true, wird diese Alternative statt der vorgeschlagenen verwendet.
       replacement: normalizeInventoryReplacement(inventoryInput.replacement)
     }
   };
@@ -36,12 +39,9 @@ export function normalizeEditableOffer(input = {}) {
 
 export function buildEditableOfferState(run, overrides = {}) {
   const persisted = normalizeEditableOffer(run?.summary?.editable_offer || {});
-  const editableOffer = normalizeEditableOffer({
-    ...persisted,
-    ...(overrides.editable_offer || {})
-  });
-  const inventoryAlternative = resolveInventoryAlternative(run);
-  const inventoryEnabled = inventoryAlternative.suggested && editableOffer.inventory_alternative.enabled !== false;
+  const editableOffer = normalizeEditableOffer(mergeEditableOffer(persisted, overrides.editable_offer || {}));
+  const inventoryAlternative = resolveInventoryAlternativeForEditableOffer(run, editableOffer);
+  const inventoryEnabled = inventoryAlternative.enabled === true;
   const customer = run?.customer_json || {};
   const customerName = run?.summary?.customerName || [customer.first_name, customer.last_name].filter(Boolean).join(' ');
   const defaultRecipient = {
@@ -72,6 +72,21 @@ export function buildEditableOfferState(run, overrides = {}) {
       inventory_alternative: {
         ...inventoryAlternative,
         enabled: inventoryEnabled
+      }
+    }
+  };
+}
+
+function mergeEditableOffer(base, override) {
+  return {
+    ...base,
+    ...override,
+    inventory_alternative: {
+      ...(base.inventory_alternative || {}),
+      ...(override.inventory_alternative || {}),
+      replacement: {
+        ...(base.inventory_alternative?.replacement || {}),
+        ...(override.inventory_alternative?.replacement || {})
       }
     }
   };
@@ -117,17 +132,26 @@ export function inventoryAlternativeRuleSummary(state) {
     hideable: state.tables.inventory_alternative.hideable,
     ownerOverrideAllowed: state.tables.inventory_alternative.owner_override_allowed,
     replacementAllowed: state.tables.inventory_alternative.replacement_allowed,
-    enabled: state.tables.inventory_alternative.enabled
+    enabled: state.tables.inventory_alternative.enabled,
+    activeSource: state.tables.inventory_alternative.active_source,
+    replacementEnabled: state.editable_offer.inventory_alternative.replacement.enabled === true
   };
 }
 
 function normalizeInventoryReplacement(input) {
-  if (!input || typeof input !== 'object') return null;
+  if (!input || typeof input !== 'object') {
+    return {
+      enabled: false,
+      inventory_sku: '',
+      inventory_name: '',
+      reason: ''
+    };
+  }
   return {
     enabled: input.enabled === true,
-    inventory_sku: input.inventory_sku || null,
-    inventory_name: input.inventory_name || null,
-    reason: input.reason || null
+    inventory_sku: String(input.inventory_sku || '').trim(),
+    inventory_name: String(input.inventory_name || '').trim(),
+    reason: String(input.reason || '').trim()
   };
 }
 
@@ -149,6 +173,36 @@ function resolveInventoryAlternative(run = {}) {
   };
 }
 
+function resolveInventoryAlternativeForEditableOffer(run, editableOffer) {
+  const original = resolveInventoryAlternative(run);
+  const replacement = editableOffer.inventory_alternative.replacement;
+  const enabled = original.suggested && editableOffer.inventory_alternative.enabled !== false;
+  if (!enabled) {
+    return {
+      ...original,
+      enabled: false,
+      active_source: 'hidden',
+      table: null
+    };
+  }
+  if (replacement.enabled === true) {
+    const replacementTable = inventoryReplacementTable(replacement, original.table);
+    return {
+      ...original,
+      enabled: Boolean(replacementTable),
+      active_source: 'replacement',
+      replacement,
+      heading: replacementTable ? INVENTORY_HEADING : null,
+      table: replacementTable
+    };
+  }
+  return {
+    ...original,
+    enabled: true,
+    active_source: 'suggested'
+  };
+}
+
 function inventoryTableFromMatch(run = {}) {
   const match = run.match_json || {};
   const rows = draftRowsFromPricing(match.kalkulation_lager || {});
@@ -159,6 +213,68 @@ function inventoryTableFromMatch(run = {}) {
     intro: `Passendes Lagerfahrzeug: ${match.top_lager_name || match.topInventoryName || run.summary?.topInventoryName || 'Lagerfahrzeug'}`,
     rows
   };
+}
+
+function inventoryReplacementTable(replacement, originalTable) {
+  const product = findEduardProductByCode(replacement.inventory_sku);
+  const rows = product
+    ? draftRowsFromCatalogProduct(product, replacement)
+    : draftRowsFromReplacementFallback(originalTable?.rows || [], replacement);
+  if (!rows.length) return null;
+  const displayName = replacementDisplayName(replacement);
+  return {
+    role: 'inventory_alternative',
+    title: INVENTORY_HEADING,
+    intro: [
+      `Passendes Lagerfahrzeug: ${displayName}`,
+      replacement.reason ? `Grund: ${replacement.reason}` : ''
+    ].filter(Boolean).join(' - '),
+    replacement: {
+      enabled: true,
+      inventory_sku: replacement.inventory_sku,
+      inventory_name: replacement.inventory_name,
+      reason: replacement.reason
+    },
+    rows
+  };
+}
+
+function draftRowsFromCatalogProduct(product, replacement) {
+  const uvpNet = Number((Number(product.grossPriceConfigurator || 0) / 1.2).toFixed(2));
+  const offerNet = Number(product.netPriceDiscount3 || product.netPrice || uvpNet);
+  const discountNet = uvpNet - offerNet;
+  const productName = replacementDisplayName(replacement) || `${product.type} ${product.lxw} - ${product.grossWeightKg}kg (Art.Nr: ${product.productCode})`;
+  return [
+    {
+      type: 'item',
+      product: productName,
+      uvp: formatMoney(uvpNet),
+      discount: formatMoney(discountNet),
+      offer: formatMoney(offerNet)
+    },
+    { product: 'Gesamt netto', uvp: formatMoney(uvpNet), discount: formatMoney(discountNet), offer: formatMoney(offerNet), type: 'total' },
+    { product: '20% MwSt', uvp: formatMoney(uvpNet * 0.2), discount: formatMoney(discountNet * 0.2), offer: formatMoney(offerNet * 0.2), type: 'vat' },
+    { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: formatMoney(uvpNet * 1.2), discount: formatMoney(discountNet * 1.2), offer: formatMoney(offerNet * 1.2), type: 'gross' }
+  ];
+}
+
+function draftRowsFromReplacementFallback(rows, replacement) {
+  if (!rows.length) return [];
+  return rows.map((row, index) => {
+    if (index !== 0 || row.type !== 'item') return row;
+    return {
+      ...row,
+      product: replacementDisplayName(replacement) || row.product
+    };
+  });
+}
+
+function replacementDisplayName(replacement) {
+  const name = replacement.inventory_name || '';
+  const sku = replacement.inventory_sku || '';
+  if (!name) return sku;
+  if (!sku || name.includes(sku)) return name;
+  return `${name} (Art.Nr: ${sku})`;
 }
 
 function draftRowsFromPricing(pricing = {}) {
@@ -199,27 +315,46 @@ function draftRowsFromEditableRows(rows = []) {
 function fingerprintFromState(state) {
   const requestedRows = state.tables.requested.rows;
   const inventory = state.tables.inventory_alternative;
+  const inventoryName = inventory.enabled
+    ? inventory.active_source === 'replacement'
+      ? inventory.replacement?.inventory_name || null
+      : inventory.source?.top_lager_name || null
+    : null;
   return {
     requestedModel: firstItemProduct(requestedRows),
     requestedTotalGross: grossOffer(requestedRows),
     inventoryEnabled: inventory.enabled,
     inventoryHeading: inventory.enabled ? inventory.heading : null,
+    inventorySource: inventory.enabled ? inventory.active_source : null,
+    inventory_name: inventoryName,
+    inventorySku: inventory.enabled && inventory.active_source === 'replacement' ? inventory.replacement?.inventory_sku || null : null,
     inventoryModel: inventory.enabled ? firstItemProduct(inventory.table?.rows || []) : null,
     inventoryTotalGross: inventory.enabled ? grossOffer(inventory.table?.rows || []) : null,
-    tableCount: inventory.enabled ? 2 : 1
+    inventoryReplacementReason: inventory.enabled && inventory.active_source === 'replacement' ? inventory.replacement?.reason || null : null,
+    tableCount: inventory.enabled ? 2 : 1,
+    inventoryTableCount: inventory.enabled ? 1 : 0,
+    originalInventoryStillVisible: false
   };
 }
 
 function fingerprintFromHtml(html, state) {
   const review = fingerprintFromState(state);
+  const originalName = state.tables.inventory_alternative.source?.top_lager_name || null;
+  const replacementActive = review.inventorySource === 'replacement';
   return {
     requestedModel: htmlContainsValue(html, review.requestedModel) ? review.requestedModel : null,
     requestedTotalGross: htmlContainsValue(html, review.requestedTotalGross) ? review.requestedTotalGross : null,
     inventoryEnabled: html.includes(INVENTORY_HEADING),
     inventoryHeading: html.includes(INVENTORY_HEADING) ? INVENTORY_HEADING : null,
+    inventorySource: review.inventorySource,
+    inventory_name: htmlContainsValue(html, review.inventory_name) ? review.inventory_name : null,
+    inventorySku: htmlContainsValue(html, review.inventorySku) ? review.inventorySku : null,
     inventoryModel: htmlContainsValue(html, review.inventoryModel) ? review.inventoryModel : null,
     inventoryTotalGross: htmlContainsValue(html, review.inventoryTotalGross) ? review.inventoryTotalGross : null,
-    tableCount: (html.match(/<table\b/gi) || []).length
+    inventoryReplacementReason: htmlContainsValue(html, review.inventoryReplacementReason) ? review.inventoryReplacementReason : null,
+    tableCount: (html.match(/<table\b/gi) || []).length,
+    inventoryTableCount: html.includes(INVENTORY_HEADING) ? 1 : 0,
+    originalInventoryStillVisible: Boolean(replacementActive && originalName && originalName !== review.inventory_name && htmlContainsValue(html, originalName))
   };
 }
 
@@ -231,10 +366,10 @@ function htmlContainsValue(html, value) {
 function firstFingerprintDifference(review, preview, mail) {
   for (const key of Object.keys(review)) {
     if (preview[key] !== review[key]) {
-      return { field: key, review: review[key], preview: preview[key] };
+      return `preview.${key} != review.${key}${review.inventorySource === 'replacement' ? ' (Replacement-Fall)' : ''}`;
     }
     if (mail[key] !== review[key]) {
-      return { field: key, review: review[key], mail: mail[key] };
+      return `mail.${key} != review.${key}${review.inventorySource === 'replacement' ? ' (Replacement-Fall)' : ''}`;
     }
   }
   return null;

@@ -29,8 +29,10 @@ import { resolveProductCategory } from '../core/pricing.js';
 import { createImapPollerRegistry, resolveImapHost, testImapConnection } from '../core/imap-poller.js';
 import {
   INVENTORY_ALTERNATIVE_RULES,
+  buildEditableOfferState,
   checkEditableOfferConsistency,
-  normalizeEditableOffer
+  normalizeEditableOffer,
+  renderEditableOfferHtml
 } from '../core/editable-offer.js';
 import { listInventoryImports } from '../inventory-import.js';
 import { processMailMessage } from '../index.js';
@@ -730,24 +732,28 @@ export function createAdminApp(options = {}) {
       return;
     }
     const draft = normalizeCustomerSendPayload(req.body || {});
+    const finalEditableOffer = draft.editable_offer || run.summary?.editable_offer || null;
+    const finalHtml = finalEditableOffer
+      ? renderEditableOfferHtml(buildEditableOfferState(run, { editable_offer: finalEditableOffer }))
+      : draft.html;
     const config = loadConfig();
     const runtime = await mailRuntimeFactory(config, req.tenantContext);
     await runtime.sendHtmlMail(runtime.client, {
       to: draft.to,
       subject: draft.subject,
-      html: draft.html
+      html: finalHtml
     });
     const sentAt = new Date().toISOString();
     await updateOfferRun(run.id, {
       status: 'sent_to_customer',
       draft_subject: draft.subject,
-      draft_html: draft.html,
+      draft_html: finalHtml,
       completed_at: sentAt,
       summary: {
         ...(run.summary || {}),
         customerEmail: draft.to,
         customerSentAt: sentAt,
-        editable_offer: draft.editable_offer || run.summary?.editable_offer || null
+        editable_offer: finalEditableOffer
       }
     }, req.tenantContext);
     await appendOfferRunEvent(run.id, {
@@ -768,7 +774,9 @@ export function createAdminApp(options = {}) {
       res.status(404).json({ ok: false, error: 'run_not_found' });
       return;
     }
-    const editableOffer = normalizeEditableOffer(req.body?.editable_offer || req.body || {});
+    const editableOffer = buildEditableOfferState(run, {
+      editable_offer: req.body?.editable_offer || req.body || {}
+    }).editable_offer;
     const updated = await updateOfferRun(run.id, {
       summary: {
         ...(run.summary || {}),

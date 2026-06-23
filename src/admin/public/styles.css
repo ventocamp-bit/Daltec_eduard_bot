@@ -1016,6 +1016,18 @@ iframe {
   color: #374151;
 }
 
+.inventory-alternative-control,
+.inventory-replacement {
+  display: grid;
+  gap: 10px;
+}
+
+.inventory-replacement {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
 .draft-toggle {
   align-items: center;
   border: 1px solid #cfd6df;

@@ -840,7 +840,7 @@ function runDetailHtml(run, options = {}) {
         <button type="button" class="secondary add-draft-row" data-add-draft-row${readOnly ? ' hidden' : ''}>+ Zeile hinzuf&uuml;gen</button>
       </section>
       ${inventoryAlternativeToggleHtml(draft, { readOnly })}
-      <script type="application/json" data-draft-extra-tables>${jsonScriptContent(draft.extraTables)}</script>
+      <script type="application/json" data-draft-extra-tables>${jsonScriptContent(draft.baseExtraTables)}</script>
 
       <section class="draft-section">
         <strong>Hinweise (optional) <span class="field-badge editable">Dauerhaft anpassbar</span></strong>
@@ -904,15 +904,20 @@ function draftReviewState(run) {
   const defaultRows = draftRows(run);
   const rows = Array.isArray(saved.rows) && saved.rows.length ? saved.rows : defaultRows;
   const inventoryAlternativeEnabled = saved.inventory_alternative?.enabled !== false;
+  const inventoryReplacement = normalizeInventoryReplacement(saved.inventory_alternative?.replacement);
+  const visibleExtraTables = inventoryReplacement.enabled ? replacementExtraTables(extraTables, inventoryReplacement) : extraTables;
   return {
     customerName,
     to: saved.to || run.draft?.customer_email || run.summary?.customerEmail || customer.email || '',
     subject: saved.subject || run.draft?.subject || run.draft_subject || `Ihr Eduard Angebot${customerName ? ` - ${customerName}` : ''}`,
     intro: saved.intro ?? (paragraphs[0] || defaultIntro(customerName)),
     rows,
-    extraTables,
-    inventoryAlternativeAvailable: extraTables.length > 0,
+    extraTables: visibleExtraTables,
+    baseExtraTables: extraTables,
+    inventoryReplacement,
+    inventoryAlternativeAvailable: visibleExtraTables.length > 0,
     inventoryAlternativeEnabled,
+    inventoryAlternativeName: extraTables[0]?.intro?.replace(/^Passendes Lagerfahrzeug:\s*/, '') || '',
     notes: saved.notes ?? draftNotesFromHtml(draftOriginalHtml(run)),
     signature: saved.signature ?? (paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})),
     catalog: catalogReadOnlySummary(run)
@@ -1094,15 +1099,77 @@ function draftExtraTables(run) {
   }];
 }
 
+function normalizeInventoryReplacement(input = {}) {
+  return {
+    enabled: input?.enabled === true,
+    inventory_sku: String(input?.inventory_sku || '').trim(),
+    inventory_name: String(input?.inventory_name || '').trim(),
+    reason: String(input?.reason || '').trim()
+  };
+}
+
+function replacementExtraTables(extraTables = [], replacement = {}) {
+  if (!replacement.enabled || !extraTables.length) return extraTables;
+  return extraTables.map((table, tableIndex) => {
+    if (tableIndex !== 0) return table;
+    const displayName = replacementDisplayName(replacement);
+    return {
+      ...table,
+      intro: [
+        `Passendes Lagerfahrzeug: ${displayName || 'Lagerfahrzeug'}`,
+        replacement.reason ? `Grund: ${replacement.reason}` : ''
+      ].filter(Boolean).join(' - '),
+      replacement,
+      rows: (table.rows || []).map((row, rowIndex) => (
+        rowIndex === 0 && row.type === 'item'
+          ? { ...row, product: displayName || row.product }
+          : row
+      ))
+    };
+  });
+}
+
+function replacementDisplayName(replacement = {}) {
+  const name = replacement.inventory_name || '';
+  const sku = replacement.inventory_sku || '';
+  if (!name) return sku;
+  if (!sku || name.includes(sku)) return name;
+  return `${name} (Art.Nr: ${sku})`;
+}
+
 function inventoryAlternativeToggleHtml(draft, options = {}) {
   if (!draft.inventoryAlternativeAvailable) return '';
   const checked = draft.inventoryAlternativeEnabled ? ' checked' : '';
   const disabled = options.readOnly ? ' disabled' : '';
+  const replacement = draft.inventoryReplacement || {};
+  const replacementChecked = replacement.enabled ? ' checked' : '';
   return `
-    <label class="draft-toggle">
-      <input type="checkbox" data-inventory-alternative-toggle${checked}${disabled}>
-      Lager-Alternative anzeigen
-    </label>
+    <section class="draft-section inventory-alternative-control">
+      <label class="draft-toggle">
+        <input type="checkbox" data-inventory-alternative-toggle${checked}${disabled}>
+        Lager-Alternative anzeigen
+      </label>
+      <div class="draft-readonly-source">
+        <strong>Aktuelle vorgeschlagene Lager-Alternative <span class="field-badge readonly">Nur lesend</span></strong>
+        <span>${escapeHtml(draft.inventoryAlternativeName || 'Lager-Alternative')}</span>
+      </div>
+      <div class="inventory-replacement">
+        <strong>Alternative ersetzen <span class="field-badge editable">Dauerhaft anpassbar</span></strong>
+        <label class="draft-toggle">
+          <input type="checkbox" data-inventory-replacement-enabled${replacementChecked}${disabled}>
+          Diese Alternative verwenden
+        </label>
+        <label>Artikelnummer (optional)
+          <input data-inventory-replacement-field="inventory_sku" type="text" value="${escapeHtml(replacement.inventory_sku || '')}"${disabled}>
+        </label>
+        <label>Alternative Produktbezeichnung
+          <input data-inventory-replacement-field="inventory_name" type="text" value="${escapeHtml(replacement.inventory_name || '')}"${disabled}>
+        </label>
+        <label>Warum ersetzt (optional)
+          <textarea data-inventory-replacement-field="reason" rows="2"${disabled}>${escapeHtml(replacement.reason || '')}</textarea>
+        </label>
+      </div>
+    </section>
   `;
 }
 
@@ -1211,7 +1278,9 @@ function draftExtraTablesFromForm(form) {
   const source = form.querySelector('[data-draft-extra-tables]')?.textContent || '[]';
   try {
     const tables = JSON.parse(source);
-    return Array.isArray(tables) ? tables : [];
+    if (!Array.isArray(tables)) return [];
+    const replacement = replacementFromForm(form);
+    return replacement.enabled && replacement.inventory_name ? replacementExtraTables(tables.slice(0, 1), replacement) : tables;
   } catch {
     return [];
   }
@@ -1223,6 +1292,7 @@ function jsonScriptContent(value) {
 
 function editableOfferPayloadFromForm(form) {
   const toggle = form.querySelector('[data-inventory-alternative-toggle]');
+  const replacement = replacementFromForm(form);
   return {
     to: form.querySelector('[data-draft-field="to"]').value.trim(),
     subject: form.querySelector('[data-draft-field="subject"]').value.trim(),
@@ -1232,9 +1302,19 @@ function editableOfferPayloadFromForm(form) {
     notes: form.querySelector('[data-draft-field="notes"]').value,
     signature: form.querySelector('[data-draft-field="signature"]').value,
     inventory_alternative: {
-      enabled: toggle ? toggle.checked : true
+      enabled: toggle ? toggle.checked : true,
+      replacement
     }
   };
+}
+
+function replacementFromForm(form) {
+  return normalizeInventoryReplacement({
+    enabled: form.querySelector('[data-inventory-replacement-enabled]')?.checked === true,
+    inventory_sku: form.querySelector('[data-inventory-replacement-field="inventory_sku"]')?.value.trim() || '',
+    inventory_name: form.querySelector('[data-inventory-replacement-field="inventory_name"]')?.value.trim() || '',
+    reason: form.querySelector('[data-inventory-replacement-field="reason"]')?.value.trim() || ''
+  });
 }
 
 function editableRowsFromForm(form) {
