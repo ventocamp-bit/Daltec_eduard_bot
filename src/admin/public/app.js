@@ -1,5 +1,3 @@
-import { buildEditedDraftHtml } from './draft-review.js';
-
 const form = document.querySelector('#settings-form');
 const appView = document.querySelector('#app-view');
 const loginView = document.querySelector('#login-view');
@@ -55,6 +53,8 @@ const contentShell = document.querySelector('.content-shell');
 let currentSettings = {};
 let activeDraftPreviewForm = null;
 let editableOfferSaveTimer;
+let editableOfferRenderTimer;
+let editableOfferRenderSequence = 0;
 
 document.querySelector('#save').addEventListener('click', save);
 document.querySelector('#logout').addEventListener('click', logout);
@@ -772,9 +772,7 @@ async function renderRunDetail(runId, options = {}) {
       form.addEventListener('click', (event) => handleDraftTableClick(event, form));
     }
     recalculateDraftTotals(form);
-    previewFrame.srcdoc = buildEditedDraftPayload(form).html;
-    previewStateLabel.textContent = 'Draft';
-    setStatus('Draft Vorschau geladen');
+    syncDraftPreview(form);
   }
   if (!options.readOnly) {
     runDetailBodyEl.querySelector('[data-reject-draft]')?.addEventListener('click', () => rejectDraft(run.id));
@@ -1240,38 +1238,35 @@ async function rejectDraft(runId) {
 function buildEditedDraftPayload(form) {
   recalculateDraftTotals(form);
   const editable_offer = editableOfferPayloadFromForm(form);
-  const html = buildEditedDraftHtml(mailInputFromEditableOffer(editable_offer));
-  return { to: editable_offer.to, subject: editable_offer.subject, html, editable_offer };
-}
-
-function mailInputFromEditableOffer(editableOffer) {
-  return {
-    intro: editableOffer.intro,
-    tables: [
-      {
-        title: editableOffer.extra_tables.length ? 'WUNSCH-KONFIGURATION' : '',
-        rows: editableOffer.rows.map((row) => ({
-          type: row.type || '',
-          product: row.product,
-          uvp: formatMoney(parseMoney(row.uvpNet) || 0),
-          discount: formatMoney(parseMoney(row.discount) || 0),
-          offer: formatMoney(parseMoney(row.offerNet) || 0)
-        }))
-      },
-      ...editableOffer.extra_tables
-    ],
-    notes: editableOffer.notes,
-    signature: editableOffer.signature,
-    settings: currentSettings
-  };
+  return { to: editable_offer.to, subject: editable_offer.subject, editable_offer };
 }
 
 function syncDraftPreview(form) {
-  previewFrame.srcdoc = buildEditedDraftPayload(form).html;
+  clearTimeout(editableOfferRenderTimer);
+  const renderSequence = ++editableOfferRenderSequence;
+  previewStateLabel.textContent = 'Laedt';
+  setStatus('Draft Vorschau wird gerendert...');
+  editableOfferRenderTimer = setTimeout(() => {
+    renderDraftPreview(form, renderSequence).catch((error) => {
+      if (renderSequence !== editableOfferRenderSequence) return;
+      showDraftError(form, error.message);
+      setStatus('Draft Vorschau fehlgeschlagen');
+    });
+  }, 180);
+}
+
+async function renderDraftPreview(form, renderSequence) {
+  const runId = form.dataset.runId;
+  if (!runId) return;
+  const result = await request(`/api/offer-runs/${encodeURIComponent(runId)}/render-editable-offer`, {
+    method: 'POST',
+    body: JSON.stringify({ editable_offer: editableOfferPayloadFromForm(form) })
+  });
+  if (renderSequence !== editableOfferRenderSequence) return;
+  previewFrame.srcdoc = result.html;
   previewStateLabel.textContent = 'Draft';
   setStatus('Draft Vorschau aktuell');
 }
-
 function draftExtraTablesFromForm(form) {
   const toggle = form.querySelector('[data-inventory-alternative-toggle]');
   if (toggle && !toggle.checked) return [];

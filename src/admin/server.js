@@ -12,7 +12,6 @@ import {
   createMicrosoftConnectUrl,
   getMailConnectionStatus
 } from '../mail-connections.js';
-import { runWorkflow } from '../workflow.js';
 import { isEduardInquiry } from '../workflow.js';
 import { processOfferRun, recordOwnerFeedback, setOfferRunStatus } from '../offer-run-service.js';
 import { deliverRunDraftToOwner } from '../owner-delivery.js';
@@ -732,10 +731,8 @@ export function createAdminApp(options = {}) {
       return;
     }
     const draft = normalizeCustomerSendPayload(req.body || {});
-    const finalEditableOffer = draft.editable_offer || run.summary?.editable_offer || null;
-    const finalHtml = finalEditableOffer
-      ? renderEditableOfferHtml(buildEditableOfferState(run, { editable_offer: finalEditableOffer }))
-      : draft.html;
+    const rendered = renderEditableOfferForRun(run, draft.editable_offer);
+    const finalHtml = rendered.html;
     const config = loadConfig();
     const runtime = await mailRuntimeFactory(config, req.tenantContext);
     await runtime.sendHtmlMail(runtime.client, {
@@ -753,7 +750,7 @@ export function createAdminApp(options = {}) {
         ...(run.summary || {}),
         customerEmail: draft.to,
         customerSentAt: sentAt,
-        editable_offer: finalEditableOffer
+        editable_offer: rendered.normalized_editable_offer
       }
     }, req.tenantContext);
     await appendOfferRunEvent(run.id, {
@@ -765,6 +762,25 @@ export function createAdminApp(options = {}) {
   } catch (error) {
     res.status(error.statusCode || 500).json({ ok: false, error: error.message });
   }
+  });
+
+  app.post('/api/offer-runs/:id/render-editable-offer', async (req, res) => {
+    try {
+      const run = await loadOfferRun(req.params.id, req.tenantContext);
+      if (!run) {
+        res.status(404).json({ ok: false, error: 'run_not_found' });
+        return;
+      }
+      const rendered = renderEditableOfferForRun(run, req.body?.editable_offer || req.body || {});
+      res.json({
+        ok: true,
+        html: rendered.html,
+        normalized_editable_offer: rendered.normalized_editable_offer,
+        summary: rendered.summary
+      });
+    } catch (error) {
+      res.status(error.statusCode || 500).json({ ok: false, error: error.message });
+    }
   });
 
   app.patch('/api/offer-runs/:id/editable-offer', async (req, res) => {
@@ -863,22 +879,6 @@ export function createAdminApp(options = {}) {
       }
     }, req.tenantContext);
     res.json({ ok: true, path: target, backupPath, validation });
-  } catch (error) {
-    next(error);
-  }
-  });
-
-  app.post('/api/preview', async (req, res, next) => {
-  try {
-    const settings = req.body.settings || await loadSettings(req.tenantContext);
-    delete settings.mail?.cc;
-    if (settings.mail?.internalSubject && !settings.mail.subject) {
-      settings.mail.subject = settings.mail.internalSubject;
-    }
-    delete settings.mail?.internalSubject;
-    const message = req.body.message || sampleMessage();
-    const result = runWorkflow(message, { settings });
-    res.json(result.offer);
   } catch (error) {
     next(error);
   }
@@ -1517,7 +1517,7 @@ function escapeHtml(value) {
 function normalizeCustomerSendPayload(input = {}) {
   const to = String(input.to || '').trim();
   const subject = String(input.subject || '').trim();
-  const html = String(input.html || '').trim();
+  const hasEditableOffer = Object.hasOwn(input, 'editable_offer');
   if (!to) {
     const error = new Error('to_required');
     error.statusCode = 400;
@@ -1528,16 +1528,30 @@ function normalizeCustomerSendPayload(input = {}) {
     error.statusCode = 400;
     throw error;
   }
-  if (!html) {
-    const error = new Error('html_required');
+  if (!hasEditableOffer) {
+    const error = new Error('editable_offer_required');
     error.statusCode = 400;
     throw error;
   }
   return {
     to,
+    to,
     subject,
-    html,
-    editable_offer: Object.hasOwn(input, 'editable_offer') ? normalizeEditableOffer(input.editable_offer || {}) : null
+    editable_offer: normalizeEditableOffer(input.editable_offer || {})
+  };
+}
+
+function renderEditableOfferForRun(run, editableOfferInput = {}) {
+  const state = buildEditableOfferState(run, { editable_offer: editableOfferInput });
+  const inventory = state.tables.inventory_alternative;
+  return {
+    html: renderEditableOfferHtml(state),
+    normalized_editable_offer: state.editable_offer,
+    summary: {
+      tableCount: inventory.enabled ? 2 : 1,
+      inventorySource: inventory.enabled ? inventory.active_source || null : null,
+      inventoryHeading: inventory.enabled ? inventory.heading || null : null
+    }
   };
 }
 
@@ -1682,23 +1696,3 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   });
 }
 
-function sampleMessage() {
-  return {
-    subject: 'Eduard Anfrage',
-    text: [
-      'Vorname  Max',
-      'Nachname  Mustermann',
-      'E-mail-Adresse  max@example.com',
-      'Hochlader 3318 3500kg  EUR 3.000,00'
-    ].join('\n'),
-    html: [
-      '<table>',
-      '<tr><td><strong>Vorname</strong></td><td>Max</td></tr>',
-      '<tr><td><strong>Nachname</strong></td><td>Mustermann</td></tr>',
-      '<tr><td><strong>E-mail-Adresse</strong></td><td>max@example.com</td></tr>',
-      '<tr><td>Hochlader 3318 3500kg</td><td>&euro; 3.000,00</td></tr>',
-      '<tr><td>COC & Typisierung</td><td>&euro; 200,00</td></tr>',
-      '</table>'
-    ].join('')
-  };
-}

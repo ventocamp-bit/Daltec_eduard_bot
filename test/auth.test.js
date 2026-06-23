@@ -570,7 +570,11 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /data-price-field="offerNet"/);
   assert.doesNotMatch(appSource, /data-price-field="uvpGross"/);
   assert.match(appSource, /readonly aria-readonly="true"/);
-  assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
+  assert.doesNotMatch(appSource, /import \\{ buildEditedDraftHtml \\}/);
+  assert.doesNotMatch(appSource, /buildEditedDraftHtml/);
+  assert.doesNotMatch(appSource, /previewFrame\\.srcdoc = buildEditedDraftPayload\\(form\\)\\.html/);
+  assert.match(appSource, /\/render-editable-offer/);
+  assert.match(appSource, /editableOfferRenderSequence/);
   assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);
   assert.match(appSource, /data-draft-extra-tables/);
   assert.match(appSource, /data-inventory-alternative-toggle/);
@@ -592,14 +596,12 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /extra_tables: draftExtraTablesFromForm\(form\)/);
   assert.match(appSource, /notes: form\.querySelector\('\[data-draft-field="notes"\]'\)\.value/);
   assert.match(appSource, /signature: form\.querySelector\('\[data-draft-field="signature"\]'\)\.value/);
-  assert.match(appSource, /if \(toggle && !toggle\.checked\) return \[\]/);
-  assert.match(appSource, /draftExtraTables\(run\)/);
-  assert.match(appSource, /match\.hasInventoryMatch === true/);
-  assert.match(appSource, /match\.topInventoryName/);
-  assert.match(appSource, /SOFORT AB LAGER VERFÜGBAR/);
-  assert.match(appSource, /const html = buildEditedDraftHtml\(mailInputFromEditableOffer\(editable_offer\)\)/);
-  assert.match(appSource, /function mailInputFromEditableOffer\(editableOffer\)/);
-  assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
+  assert.doesNotMatch(appSource, /import \\{ buildEditedDraftHtml \\}/);
+  assert.doesNotMatch(appSource, /buildEditedDraftHtml/);
+  assert.doesNotMatch(appSource, /function mailInputFromEditableOffer\(editableOffer\)/);
+  assert.doesNotMatch(appSource, /previewFrame\\.srcdoc = buildEditedDraftPayload\\(form\\)\\.html/);
+  assert.match(appSource, /\/render-editable-offer/);
+  assert.match(appSource, /editableOfferRenderSequence/);
   assert.match(appSource, /request\(`\/api\/offer-runs\/\$\{encodeURIComponent\(runId\)\}\/send-to-customer`/);
 });
 
@@ -702,7 +704,7 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
       body: JSON.stringify({ to: 'edited@example.at', subject: 'Bearbeitetes Eduard Angebot' })
     });
     assert.equal(missingHtml.status, 400);
-    assert.deepEqual(await missingHtml.json(), { ok: false, error: 'html_required' });
+    assert.deepEqual(await missingHtml.json(), { ok: false, error: 'editable_offer_required' });
 
     const editableOffer = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/editable-offer`, {
       method: 'PATCH',

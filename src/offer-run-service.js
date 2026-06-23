@@ -1,6 +1,7 @@
 import { loadSettings } from './settings.js';
 import { fileExists, fileMetadata, readCsvObjects } from './adapters/local-data.js';
 import { runWorkflow } from './workflow.js';
+import { buildEditableOfferState, renderEditableOfferHtml } from './core/editable-offer.js';
 import {
   appendOfferRunEvent,
   loadOfferRun,
@@ -164,7 +165,23 @@ export async function processOfferRun(runId, context = {}) {
         }
       },
       draft_subject: result.offer?.betreff || '',
-      draft_html: result.offer?.html_angebot || '',
+      draft_html: renderEditableOfferHtml(buildEditableOfferState({
+        ...loaded,
+        draft_subject: result.offer?.betreff || '',
+        pricing_json: result.matched?.kalkulation_anfrage || result.priced?.kalkulation_anfrage || {},
+        match_json: {
+          ...match,
+          upsell_daten: result.matched?.upsell_daten || [],
+          kalkulation_lager: result.matched?.kalkulation_lager || null
+        },
+        summary: {
+          customerEmail: result.inquiry.kunde_email,
+          customerName: [result.inquiry.kunde_vorname, result.inquiry.kunde_nachname].filter(Boolean).join(' '),
+          lineItemCount: result.inquiry.line_items.length,
+          totalGross: result.matched?.kalkulation_anfrage?.gesamt_angebot_brutto || 0,
+          ...match
+        }
+      })),
       error_code: errorCode,
       error_message: errorMessage,
       summary: {
