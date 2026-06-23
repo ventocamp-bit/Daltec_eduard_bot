@@ -32,6 +32,7 @@
 
         <nav class="sidebar-nav" aria-label="Admin Bereiche">
           <button type="button" class="nav-item active" data-panel-target="review-panel">Review</button>
+          <button type="button" class="nav-item" data-panel-target="history-panel">Verlauf</button>
           <button type="button" class="nav-item" data-panel-target="customize-panel">Texte & Preise</button>
           <button type="button" class="nav-item" data-panel-target="data-panel">Daten & Mail</button>
           <button type="button" class="nav-item" data-panel-target="diagnostics-panel">Diagnose</button>
@@ -92,6 +93,19 @@
                   </div>
                 </div>
                 <div id="review-list" class="review-list"></div>
+              </section>
+            </section>
+
+            <section id="history-panel" class="panel-view">
+              <section class="review-panel">
+                <div class="panel-head">
+                  <div>
+                    <strong>Verlauf</strong>
+                    <span>Gesendete und abgelehnte Angebote.</span>
+                  </div>
+                  <span id="history-state">L&auml;dt...</span>
+                </div>
+                <div id="history-list" class="history-list"></div>
               </section>
             </section>
 

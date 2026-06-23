@@ -31,6 +31,8 @@ const saasBlockersEl = document.querySelector('#saas-blockers');
 const reviewStateEl = document.querySelector('#review-state');
 const reviewListEl = document.querySelector('#review-list');
 const sendReviewDigestButton = document.querySelector('#send-review-digest');
+const historyStateEl = document.querySelector('#history-state');
+const historyListEl = document.querySelector('#history-list');
 const overviewOperationEl = document.querySelector('#overview-operation');
 const overviewOperationDetailEl = document.querySelector('#overview-operation-detail');
 const overviewProofEl = document.querySelector('#overview-proof');
@@ -65,6 +67,7 @@ runListEl.addEventListener('click', openRunFromList);
 monitoringAlertsEl.addEventListener('click', openRunFromList);
 saasBlockersEl.addEventListener('click', openRunFromList);
 reviewListEl.addEventListener('click', handleReviewQueueClick);
+historyListEl.addEventListener('click', openHistoryRun);
 sendReviewDigestButton.addEventListener('click', sendReviewDigest);
 runDetailCloseEl.addEventListener('click', () => {
   runDetailEl.hidden = true;
@@ -166,6 +169,7 @@ async function load() {
   await refreshMonitoring();
   await refreshSaasReadiness();
   await refreshReviewQueue();
+  await refreshHistory();
   await refreshMailStatus();
   await refreshDataStatus();
   await refreshInventoryImports();
@@ -592,7 +596,7 @@ async function refreshReviewQueue() {
 }
 
 function reviewQueueItemHtml(item) {
-  const warningText = item.warnings?.length ? item.warnings.join(', ') : 'keine Warnungen';
+  const warningText = reviewFlagText(item.warnings || [], item.errorCode);
   return `
     <article class="review-item ${item.errorCode ? 'needs-review' : ''}">
       <button type="button" class="review-main" data-run-id="${escapeHtml(item.id)}">
@@ -610,6 +614,44 @@ function reviewQueueItemHtml(item) {
       </div>
     </article>
   `;
+}
+
+async function refreshHistory() {
+  const runs = await request('/api/offer-runs?status=sent_to_customer,rejected');
+  historyStateEl.textContent = `${runs.length} Einträge`;
+  historyListEl.innerHTML = runs.length
+    ? `
+      <div class="history-table">
+        <div class="history-row history-head">
+          <span>Datum</span><span>Kunde</span><span>Produkt</span><span>Preis</span><span>Status</span>
+        </div>
+        ${runs.map(historyRowHtml).join('')}
+      </div>
+    `
+    : '<div class="monitor-alert ok">Noch keine gesendeten oder abgelehnten Angebote.</div>';
+}
+
+function historyRowHtml(run) {
+  return `
+    <button type="button" class="history-row" data-history-run-id="${escapeHtml(run.id)}">
+      <span>${escapeHtml(formatDateTime(run.completed_at || run.updated_at || run.created_at))}</span>
+      <span>${escapeHtml(run.summary?.customerName || run.summary?.customerEmail || run.customer_json?.email || 'Unbekannt')}</span>
+      <span>${escapeHtml(historyProduct(run))}</span>
+      <span>${escapeHtml(formatMoney(run.summary?.totalGross || run.pricing_json?.gesamt_angebot_brutto || 0))}</span>
+      <span><span class="run-status ${escapeHtml(run.status)}">${escapeHtml(historyStatusLabel(run.status))}</span></span>
+    </button>
+  `;
+}
+
+function historyProduct(run) {
+  const firstItem = Array.isArray(run.line_items_json) ? run.line_items_json[0] : null;
+  return firstItem?.produkt_name_original || firstItem?.name || run.summary?.topInventoryName || run.match_json?.topInventoryName || '-';
+}
+
+async function openHistoryRun(event) {
+  const button = event.target.closest('[data-history-run-id]');
+  if (!button) return;
+  await renderRunDetail(button.dataset.historyRunId, { readOnly: true });
 }
 
 async function handleReviewQueueClick(event) {
@@ -709,53 +751,62 @@ async function openRunFromList(event) {
   await renderRunDetail(button.dataset.runId);
 }
 
-async function renderRunDetail(runId) {
+async function renderRunDetail(runId, options = {}) {
   setStatus('Lade Draft Review...');
   const run = await request(`/api/offer-runs/${encodeURIComponent(runId)}`);
-  runDetailBodyEl.innerHTML = runDetailHtml(run);
+  runDetailBodyEl.innerHTML = runDetailHtml(run, options);
   runDetailEl.hidden = false;
   runDetailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const form = runDetailBodyEl.querySelector('[data-draft-review-form]');
   if (form) {
     activeDraftPreviewForm = form;
-    form.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
-    form.addEventListener('input', () => {
-      recalculateDraftTotals(form);
-      syncDraftPreview(form);
-    });
-    form.addEventListener('change', () => {
-      recalculateDraftTotals(form);
-      syncDraftPreview(form);
-    });
+    if (!options.readOnly) {
+      form.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
+      form.addEventListener('input', () => {
+        recalculateDraftTotals(form);
+        syncDraftPreview(form);
+      });
+      form.addEventListener('change', () => {
+        recalculateDraftTotals(form);
+        syncDraftPreview(form);
+      });
+    }
     recalculateDraftTotals(form);
     previewFrame.srcdoc = draftOriginalHtml(run) || buildEditedDraftPayload(form).html;
     previewStateLabel.textContent = 'HTML';
     setStatus('Original Draft Vorschau geladen');
   }
-  runDetailBodyEl.querySelector('[data-reject-draft]')?.addEventListener('click', () => rejectDraft(run.id));
+  if (!options.readOnly) {
+    runDetailBodyEl.querySelector('[data-reject-draft]')?.addEventListener('click', () => rejectDraft(run.id));
+  }
   setStatus('Draft Review geladen');
 }
 
-function runDetailHtml(run) {
+function runDetailHtml(run, options = {}) {
   const draft = draftReviewState(run);
+  const readOnly = options.readOnly === true;
+  const disabled = readOnly ? ' disabled' : '';
   return `
     <form class="draft-review" data-draft-review-form>
       <div class="draft-review-head">
         <div>
-          <p class="eyebrow">Draft Review</p>
+          <p class="eyebrow">${readOnly ? 'Verlauf' : 'Draft Review'}</p>
           <h2>${escapeHtml(draft.customerName || 'Kundenangebot')}</h2>
         </div>
         <span class="run-status ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>
       </div>
 
+      ${reviewFlagsHtml(run)}
+      ${originalMailHtml(run)}
+
       <div class="inline two">
-        <label>An <input data-draft-field="to" type="email" value="${escapeHtml(draft.to)}" required></label>
-        <label>Betreff <input data-draft-field="subject" type="text" value="${escapeHtml(draft.subject)}" required></label>
+        <label>An <input data-draft-field="to" type="email" value="${escapeHtml(draft.to)}" required${disabled}></label>
+        <label>Betreff <input data-draft-field="subject" type="text" value="${escapeHtml(draft.subject)}" required${disabled}></label>
       </div>
 
       <section class="draft-section">
         <strong>Anrede & Intro</strong>
-        <textarea data-draft-field="intro" rows="5">${escapeHtml(draft.intro)}</textarea>
+        <textarea data-draft-field="intro" rows="5"${disabled}>${escapeHtml(draft.intro)}</textarea>
       </section>
 
       <section class="draft-section">
@@ -769,18 +820,18 @@ function runDetailHtml(run) {
             </tr>
           </thead>
           <tbody>
-          ${draft.rows.map((row) => draftPriceRowHtml(row)).join('')}
+          ${draft.rows.map((row) => draftPriceRowHtml(row, { readOnly })).join('')}
           </tbody>
         </table>
       </section>
 
       <section class="draft-section">
         <strong>Signatur</strong>
-        <textarea data-draft-field="signature" rows="5">${escapeHtml(draft.signature)}</textarea>
+        <textarea data-draft-field="signature" rows="5"${disabled}>${escapeHtml(draft.signature)}</textarea>
       </section>
 
       <div class="draft-message" data-draft-message hidden></div>
-      <div class="draft-actions">
+      <div class="draft-actions"${readOnly ? ' hidden' : ''}>
         <button type="button" class="danger" data-reject-draft>✗ Ablehnen</button>
         <button type="submit" data-send-draft>✓ Mail senden</button>
       </div>
@@ -788,9 +839,9 @@ function runDetailHtml(run) {
   `;
 }
 
-function draftPriceRowHtml(row) {
+function draftPriceRowHtml(row, options = {}) {
   const calculated = ['total', 'vat', 'gross'].includes(row.type);
-  const readonly = calculated ? ' readonly aria-readonly="true"' : '';
+  const readonly = calculated || options.readOnly ? ' readonly aria-readonly="true"' : '';
   return `
     <tr class="editable-price-row ${escapeHtml(row.type || 'item')}" data-price-row data-row-type="${escapeHtml(row.type || 'item')}"${calculated ? ' data-calculated-row' : ''}>
       <td><input data-price-field="product" type="text" value="${escapeHtml(row.product)}"${readonly}></td>
@@ -819,6 +870,63 @@ function draftReviewState(run) {
 
 function draftOriginalHtml(run) {
   return run.draft?.html_body || run.draft_html || '';
+}
+
+function originalMailHtml(run) {
+  const body = originalMailBody(run);
+  if (!body) return '';
+  return `
+    <details class="original-mail">
+      <summary>Original-Kundenanfrage anzeigen</summary>
+      <pre>${escapeHtml(body)}</pre>
+    </details>
+  `;
+}
+
+function originalMailBody(run) {
+  const inbound = run.inbound_message || {};
+  if (inbound.raw_text) return inbound.raw_text;
+  if (inbound.raw_html) return htmlToPlainText(inbound.raw_html);
+  if (run.raw_input?.text) return run.raw_input.text;
+  if (run.raw_input?.html) return htmlToPlainText(run.raw_input.html);
+  return '';
+}
+
+function htmlToPlainText(html) {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(String(html), 'text/html');
+  return doc.body.textContent.replace(/\n{3,}/g, '\n\n').trim();
+}
+
+function reviewFlagsHtml(run) {
+  const text = reviewFlagText(reviewFlagCodesFromRun(run), run.error_code);
+  if (!text || text === 'keine Warnungen') return '';
+  return `<div class="review-flags">${escapeHtml(text)}</div>`;
+}
+
+function reviewFlagCodesFromRun(run) {
+  return [
+    ...(Array.isArray(run.match_json?.warnings) ? run.match_json.warnings : []),
+    ...(Array.isArray(run.pricing_json?.warnings) ? run.pricing_json.warnings : [])
+  ].map((warning) => warning.code || warning).filter(Boolean);
+}
+
+function reviewFlagText(codes = [], errorCode = '') {
+  const labels = new Set([...(codes || []), errorCode].filter(Boolean).map(reviewFlagLabel));
+  labels.delete('');
+  return labels.size ? [...labels].join(' | ') : 'keine Warnungen';
+}
+
+function reviewFlagLabel(code) {
+  return {
+    sku_not_exact: '⚠️ Kein exakter Lager-Treffer – bitte prüfen',
+    weight_mismatch: '⚠️ Gewicht weicht ab',
+    low_confidence: '⚠️ Unsichere Erkennung – bitte Anfrage lesen',
+    inventory_not_safe: '⛔ Lagerbestand zu niedrig',
+    length_mismatch: '⚠️ Maße weichen ab',
+    weak_inventory_match: '⚠️ Unsichere Erkennung – bitte Anfrage lesen',
+    no_inventory_match: '⚠️ Kein exakter Lager-Treffer – bitte prüfen'
+  }[code] || '⚠️ Bitte prüfen';
 }
 
 function draftParagraphs(html) {
@@ -893,6 +1001,7 @@ async function sendEditedDraft(event, runId) {
     message.textContent = `Mail gesendet: ${new Date(result.sent_at).toLocaleString('de-AT')}`;
     await refreshRuns();
     await refreshReviewQueue();
+    await refreshHistory();
     await refreshMonitoring();
     await refreshSaasReadiness();
   } catch (error) {
@@ -990,6 +1099,7 @@ async function submitOwnerFeedback(runId, rating, options = {}) {
   if (options.renderDetail !== false) await renderRunDetail(runId);
   await refreshRuns();
   await refreshReviewQueue();
+  await refreshHistory();
   await refreshMonitoring();
   await refreshSaasReadiness();
 }
@@ -1060,6 +1170,19 @@ function setStatus(message) {
 
 function formatMoney(value) {
   return new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' }).format(Number(value || 0));
+}
+
+function formatDateTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('de-AT');
+}
+
+function historyStatusLabel(status) {
+  return {
+    sent_to_customer: 'Gesendet',
+    rejected: 'Abgelehnt'
+  }[status] || status || '-';
 }
 
 function escapeHtml(value) {

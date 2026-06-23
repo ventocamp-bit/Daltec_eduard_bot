@@ -636,6 +636,19 @@ export function createAdminApp(options = {}) {
   }
   });
 
+  app.get('/api/offer-runs', async (req, res, next) => {
+  try {
+    const statuses = String(req.query.status || '')
+      .split(',')
+      .map((status) => status.trim())
+      .filter(Boolean);
+    const runs = await listOfferRuns(500, req.tenantContext);
+    res.json(statuses.length ? runs.filter((run) => statuses.includes(run.status)) : runs);
+  } catch (error) {
+    next(error);
+  }
+  });
+
   app.get('/api/offer-runs/:id', async (req, res, next) => {
   try {
     const run = await loadOfferRun(req.params.id, req.tenantContext);
