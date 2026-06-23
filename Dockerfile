@@ -13,6 +13,7 @@ COPY src ./src
 COPY scripts ./scripts
 COPY data/settings.example.json ./data/settings.example.json
 COPY data/lager-preis-muster.csv ./data/lager-preis-muster.csv
+COPY data/eduard-product-catalog.json ./data/eduard-product-catalog.json
 
 RUN mkdir -p /app/data /app/secrets
 

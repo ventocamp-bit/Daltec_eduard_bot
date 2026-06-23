@@ -1,4 +1,5 @@
 import { parseEuroNumber } from './format.js';
+import { loadEduardLegacyPriceRows } from './product-catalog.js';
 import { resolveOfferFactor, resolvePricingRule } from './pricing.js';
 
 const TYP_KOMPATIBEL = {
@@ -169,6 +170,7 @@ function buildMatchExplanation({
 }
 
 export function matchInventory(input, lagerBestand = [], preisliste = [], settings = {}) {
+  const masterPriceRows = preisliste.length ? preisliste : loadEduardLegacyPriceRows();
   const alleErgebnisse = [];
 
   for (const rawItem of input.line_items || []) {
@@ -237,11 +239,11 @@ export function matchInventory(input, lagerBestand = [], preisliste = [], settin
     }
 
     const topMatches = bewertetesLager.sort((a, b) => b.score - a.score).slice(0, 1);
-    alleErgebnisse.push({
+      alleErgebnisse.push({
       angefragt: anfrageName,
       anzahl_matches: topMatches.length,
       top_upsell: topMatches[0] || null,
-      kalkulation_lager: topMatches[0] ? calculateInventoryOffer(topMatches[0], preisliste, settings.pricing) : null
+      kalkulation_lager: topMatches[0] ? calculateInventoryOffer(topMatches[0], masterPriceRows, settings.pricing) : null
     });
   }
 
