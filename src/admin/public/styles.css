@@ -853,45 +853,81 @@ iframe {
 }
 
 .editable-price-table {
+  border-collapse: collapse;
   border: 1px solid #000;
-  display: grid;
   font-family: Arial, sans-serif;
   font-size: 14px;
-  overflow-x: auto;
+  width: 100%;
 }
 
-.editable-price-row {
-  display: grid;
-  grid-template-columns: minmax(260px, 1.5fr) repeat(2, minmax(130px, 0.75fr));
-}
-
-.editable-price-row > span,
-.editable-price-row > input {
-  border: 0;
-  border-right: 1px solid #000;
-  border-bottom: 1px solid #000;
-  border-radius: 0;
-  font-family: Arial, sans-serif;
-  font-size: 14px;
-  min-height: 36px;
-  padding: 7px;
-}
-
-.editable-price-row > :last-child {
-  border-right: 0;
-}
-
-.editable-price-header {
-  background: #FFC000;
+.editable-price-table th,
+.editable-price-table td {
+  border: 1px solid #000;
   color: #000;
+  padding: 0;
+}
+
+.editable-price-table th {
+  background: #FFC000;
+  font-weight: 700;
+  padding: 8px;
+  text-align: left;
+}
+
+.editable-price-table th:nth-child(2),
+.editable-price-table th:nth-child(3),
+.editable-price-table td:nth-child(2),
+.editable-price-table td:nth-child(3) {
+  text-align: right;
+}
+
+.editable-price-table input {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: inherit;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  font-weight: inherit;
+  padding: 8px;
+  text-align: inherit;
+  width: 100%;
+}
+
+.editable-price-table input:focus {
+  outline: 2px solid #111827;
+  outline-offset: -2px;
+}
+
+.editable-price-row.item {
+  background: #fff;
+}
+
+.editable-price-row.total {
+  background: #f9f9f9;
   font-weight: 700;
 }
 
-.editable-price-row.total input {
+.editable-price-row.total td {
+  border-top: 2px solid #000;
+}
+
+.editable-price-row.vat {
+  background: #fff;
+}
+
+.editable-price-row.gross {
+  background: #FFC000;
+  color: #000;
+  font-size: 16px;
   font-weight: 700;
 }
 
 .editable-price-row.gross input {
+  font-size: 16px;
+}
+
+.editable-price-row td:nth-child(3) input {
   color: #c00000;
   font-weight: 700;
 }

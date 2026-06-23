@@ -719,8 +719,15 @@ async function renderRunDetail(runId) {
   if (form) {
     activeDraftPreviewForm = form;
     form.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
-    form.addEventListener('input', () => syncDraftPreview(form));
-    form.addEventListener('change', () => syncDraftPreview(form));
+    form.addEventListener('input', () => {
+      recalculateDraftTotals(form);
+      syncDraftPreview(form);
+    });
+    form.addEventListener('change', () => {
+      recalculateDraftTotals(form);
+      syncDraftPreview(form);
+    });
+    recalculateDraftTotals(form);
     previewFrame.srcdoc = draftOriginalHtml(run) || buildEditedDraftPayload(form).html;
     previewStateLabel.textContent = 'HTML';
     setStatus('Original Draft Vorschau geladen');
@@ -753,12 +760,18 @@ function runDetailHtml(run) {
 
       <section class="draft-section">
         <strong>Preistabelle</strong>
-        <div class="editable-price-table" data-draft-table>
-          <div class="editable-price-row editable-price-header">
-            <span>Position</span><span>UVP brutto</span><span>Angebot brutto</span>
-          </div>
+        <table class="editable-price-table" data-draft-table>
+          <thead>
+            <tr>
+              <th>Position</th>
+              <th>UVP brutto</th>
+              <th>Angebot brutto</th>
+            </tr>
+          </thead>
+          <tbody>
           ${draft.rows.map((row) => draftPriceRowHtml(row)).join('')}
-        </div>
+          </tbody>
+        </table>
       </section>
 
       <section class="draft-section">
@@ -776,12 +789,14 @@ function runDetailHtml(run) {
 }
 
 function draftPriceRowHtml(row) {
+  const calculated = ['total', 'vat', 'gross'].includes(row.type);
+  const readonly = calculated ? ' readonly aria-readonly="true"' : '';
   return `
-    <div class="editable-price-row ${escapeHtml(row.type || '')}" data-price-row data-row-type="${escapeHtml(row.type || '')}">
-      <input data-price-field="product" type="text" value="${escapeHtml(row.product)}">
-      <input data-price-field="uvp" type="text" value="${escapeHtml(row.uvp)}">
-      <input data-price-field="offer" type="text" value="${escapeHtml(row.offer)}">
-    </div>
+    <tr class="editable-price-row ${escapeHtml(row.type || 'item')}" data-price-row data-row-type="${escapeHtml(row.type || 'item')}"${calculated ? ' data-calculated-row' : ''}>
+      <td><input data-price-field="product" type="text" value="${escapeHtml(row.product)}"${readonly}></td>
+      <td><input data-price-field="uvp" type="text" value="${escapeHtml(row.uvp)}"${readonly}></td>
+      <td><input data-price-field="offer" type="text" value="${escapeHtml(row.offer)}"${readonly}></td>
+    </tr>
   `;
 }
 
@@ -834,15 +849,23 @@ function defaultSignature(settings = {}) {
 function draftRows(run) {
   const pricing = run.pricing_json || {};
   const items = Array.isArray(run.line_items_json) ? run.line_items_json : [];
-  const rows = items.map((item) => ({
-    product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
-    uvp: formatMoney(item.preis_mail_brutto_num || item.price || 0),
-    offer: formatMoney(item.preis_mail_brutto_num || item.price || 0),
-    type: ''
-  }));
+  const positions = Array.isArray(pricing.positionen) ? pricing.positionen : [];
+  const rows = positions.length
+    ? positions.map((position) => ({
+      product: position.produkt_name || 'Produkt',
+      uvp: formatMoney(Number(position.uvp_netto || 0) * 1.2),
+      offer: formatMoney(Number(position.angebot_netto || 0) * 1.2),
+      type: 'item'
+    }))
+    : items.map((item) => ({
+      product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
+      uvp: formatMoney(item.preis_mail_brutto_num || item.price || 0),
+      offer: formatMoney(item.preis_mail_brutto_num || item.price || 0),
+      type: 'item'
+    }));
   rows.push(
     { product: 'Gesamt netto', uvp: formatMoney(pricing.gesamt_uvp_netto || pricing.totalUvpNet || 0), offer: formatMoney(pricing.gesamt_angebot_netto || 0), type: 'total' },
-    { product: '20% MwSt', uvp: '', offer: formatMoney(pricing.mwst_betrag || pricing.vat_amount || 0), type: 'total' },
+    { product: '20% MwSt', uvp: '', offer: formatMoney(pricing.mwst_betrag || pricing.vat_amount || 0), type: 'vat' },
     { product: 'Gesamt brutto', uvp: formatMoney(pricing.gesamt_uvp_brutto || pricing.uvpGross || 0), offer: formatMoney(pricing.gesamt_angebot_brutto || run.summary?.totalGross || 0), type: 'gross' }
   );
   return rows;
@@ -887,6 +910,7 @@ async function rejectDraft(runId) {
 }
 
 function buildEditedDraftPayload(form) {
+  recalculateDraftTotals(form);
   const to = form.querySelector('[data-draft-field="to"]').value.trim();
   const subject = form.querySelector('[data-draft-field="subject"]').value.trim();
   const html = buildEditedDraftHtml({
@@ -907,6 +931,32 @@ function syncDraftPreview(form) {
   previewFrame.srcdoc = buildEditedDraftPayload(form).html;
   previewStateLabel.textContent = 'Draft';
   setStatus('Draft Vorschau aktuell');
+}
+
+function recalculateDraftTotals(form) {
+  const itemRows = Array.from(form.querySelectorAll('[data-price-row]'))
+    .filter((row) => !row.hasAttribute('data-calculated-row'));
+  const uvpGross = itemRows.reduce((sum, row) => sum + parseMoney(row.querySelector('[data-price-field="uvp"]').value), 0);
+  const offerGross = itemRows.reduce((sum, row) => sum + parseMoney(row.querySelector('[data-price-field="offer"]').value), 0);
+  setDraftCalculatedRow(form, 'total', uvpGross / 1.2, offerGross / 1.2);
+  setDraftCalculatedRow(form, 'vat', uvpGross - uvpGross / 1.2, offerGross - offerGross / 1.2);
+  setDraftCalculatedRow(form, 'gross', uvpGross, offerGross);
+}
+
+function setDraftCalculatedRow(form, rowType, uvp, offer) {
+  const row = form.querySelector(`[data-row-type="${rowType}"]`);
+  if (!row) return;
+  row.querySelector('[data-price-field="uvp"]').value = formatMoney(uvp);
+  row.querySelector('[data-price-field="offer"]').value = formatMoney(offer);
+}
+
+function parseMoney(value) {
+  const normalized = String(value || '')
+    .replace(/[^\d,.-]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.');
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function debugMetric(label, value) {

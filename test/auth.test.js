@@ -389,10 +389,11 @@ test('review draft html composer preserves n8n table styling and edited prices',
 
   assert.match(html, /Geänderter Hochlader/);
   assert.match(html, /€ 3\.190,00/);
-  assert.match(html, /max-width:800px;width:100%;margin:0 auto;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;color:#000000/);
-  assert.match(html, /background:#f2f2f2/);
-  assert.match(html, /border-bottom:1px solid #dddddd/);
-  assert.match(html, /font-weight:bold;color:#c00000/);
+  assert.match(html, /border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;color:#000;width:100%/);
+  assert.match(html, /background:#FFC000;font-weight:bold;color:#000/);
+  assert.match(html, /border:1px solid #000/);
+  assert.match(html, /background:#f9f9f9;font-weight:bold;border-top:2px solid #000/);
+  assert.match(html, /color:#c00000;font-weight:bold/);
   assert.match(html, /font-family:Arial,sans-serif;font-size:14px/);
   assert.doesNotMatch(html, /Bearbeiteter Hinweis/);
 });
@@ -402,12 +403,16 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /data-draft-field="to" type="email" value="\$\{escapeHtml\(draft\.to\)\}"/);
   assert.match(appSource, /data-draft-field="subject" type="text" value="\$\{escapeHtml\(draft\.subject\)\}"/);
   assert.match(appSource, /data-price-field="offer" type="text" value="\$\{escapeHtml\(row\.offer\)\}"/);
+  assert.match(appSource, /<table class="editable-price-table" data-draft-table>/);
+  assert.match(appSource, /recalculateDraftTotals\(form\)/);
+  assert.match(appSource, /data-calculated-row/);
   assert.doesNotMatch(appSource, /data-draft-field="notes"/);
   assert.match(appSource, /previewFrame\.srcdoc = draftOriginalHtml\(run\) \|\| buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /button\.textContent = 'Sendet\.\.\.'/);
   assert.match(appSource, /draft-message ok/);
   assert.match(appSource, /send-to-customer/);
-  assert.match(appSource, /form\.addEventListener\('input', \(\) => syncDraftPreview\(form\)\)/);
+  assert.match(appSource, /form\.addEventListener\('input', \(\) => \{/);
+  assert.match(appSource, /recalculateDraftTotals\(form\);\s+syncDraftPreview\(form\);/);
   assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);
 });
