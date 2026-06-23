@@ -789,7 +789,7 @@ function runDetailHtml(run, options = {}) {
   const disabled = readOnly ? ' disabled' : '';
   const sendDisabled = testMode ? ' disabled' : '';
   return `
-    <form class="draft-review" data-draft-review-form data-run-id="${escapeHtml(run.id)}">
+    <form class="draft-review" data-draft-review-form data-run-id="${escapeHtml(run.id)}" data-editable-offer-version="${Number(run.summary?.editable_offer_version || 1)}">
       <div class="draft-review-head">
         <div>
           <p class="eyebrow">${readOnly ? 'Verlauf' : 'Draft Review'}</p>
@@ -1328,11 +1328,31 @@ function editableRowsFromForm(form) {
 }
 
 async function saveEditableOfferState(runId, form) {
-  const result = await request(`/api/offer-runs/${encodeURIComponent(runId)}/editable-offer`, {
-    method: 'PATCH',
-    body: JSON.stringify({ editable_offer: editableOfferPayloadFromForm(form) })
-  });
-  return result.editable_offer;
+  if (form.dataset.editableOfferSaving === 'true') {
+    form.dataset.editableOfferPending = 'true';
+    return null;
+  }
+  form.dataset.editableOfferSaving = 'true';
+  let latestEditableOffer = null;
+  try {
+    do {
+      form.dataset.editableOfferPending = 'false';
+      const result = await request(`/api/offer-runs/${encodeURIComponent(runId)}/editable-offer`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          version: Number(form.dataset.editableOfferVersion || 1),
+          editable_offer: editableOfferPayloadFromForm(form)
+        })
+      });
+      if (result.version) {
+        form.dataset.editableOfferVersion = String(result.version);
+      }
+      latestEditableOffer = result.editable_offer;
+    } while (form.dataset.editableOfferPending === 'true');
+    return latestEditableOffer;
+  } finally {
+    form.dataset.editableOfferSaving = 'false';
+  }
 }
 
 function showDraftError(form, message) {

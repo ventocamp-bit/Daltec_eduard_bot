@@ -171,7 +171,7 @@ export async function createOfferRun(inboundMessage, context = {}) {
     created_at: now,
     started_at: null,
     completed_at: null,
-    summary: {}
+    summary: { editable_offer_version: 1 }
   };
   await appendJsonl(path.join(paths.baseDir, 'offer_runs.jsonl'), run);
   return run;

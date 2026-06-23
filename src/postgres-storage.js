@@ -448,7 +448,7 @@ async function insertOfferRun(client, inboundMessage, context = {}) {
     created_at: now,
     started_at: null,
     completed_at: null,
-    summary: {}
+    summary: { editable_offer_version: 1 }
   };
   await client.query(
     `INSERT INTO offer_runs

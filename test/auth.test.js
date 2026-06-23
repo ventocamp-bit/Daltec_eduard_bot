@@ -708,6 +708,7 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
       body: JSON.stringify({
+        version: 1,
         editable_offer: {
           to: 'persisted@example.at',
           subject: 'Persistiertes Angebot',
@@ -723,6 +724,7 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     assert.equal(editableOffer.status, 200);
     const editableOfferBody = await editableOffer.json();
     assert.equal(editableOfferBody.ok, true);
+    assert.equal(editableOfferBody.version, 2);
     assert.equal(editableOfferBody.editable_offer.inventory_alternative.enabled, false);
     assert.equal(editableOfferBody.editable_offer.to, 'persisted@example.at');
     assert.equal(editableOfferBody.editable_offer.subject, 'Persistiertes Angebot');
@@ -732,6 +734,32 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     assert.equal(editableOfferBody.editable_offer.notes, 'Persistierter Hinweis');
     assert.equal(editableOfferBody.editable_offer.signature, 'Persistierte Signatur');
 
+    const stalePatchPayload = {
+      version: editableOfferBody.version,
+      editable_offer: {
+        ...editableOfferBody.editable_offer,
+        intro: 'Parallel gespeicherter Text'
+      }
+    };
+    const firstPatch = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/editable-offer`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify(stalePatchPayload)
+    });
+    assert.equal(firstPatch.status, 200);
+    const successfulPatchBody = await firstPatch.json();
+    assert.equal(successfulPatchBody.version, 3);
+    const stalePatch = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/editable-offer`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify(stalePatchPayload)
+    });
+    assert.equal(stalePatch.status, 409);
+    const conflictBody = await stalePatch.json();
+    assert.equal(conflictBody.ok, false);
+    assert.equal(conflictBody.error, 'editable_offer_conflict');
+    assert.equal(conflictBody.current_version, 3);
+    assert.equal(conflictBody.editable_offer.intro, 'Parallel gespeicherter Text');
     const editedHtml = [
       '<div style="font-family:Arial;font-size:14px;">',
       '<p>Sehr geehrte Frau Kunde, hier ist das bearbeitete Angebot.</p>',
@@ -749,6 +777,7 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
         to: 'edited@example.at',
         subject: 'Bearbeitetes Eduard Angebot',
         html: '<p>STALE BODY HTML MUST NOT BE SENT</p>',
+        version: 1,
         editable_offer: {
           to: 'edited@example.at',
           subject: 'Bearbeitetes Eduard Angebot',

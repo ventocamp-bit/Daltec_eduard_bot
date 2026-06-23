@@ -774,13 +774,26 @@ export function createAdminApp(options = {}) {
       res.status(404).json({ ok: false, error: 'run_not_found' });
       return;
     }
+    const expectedVersion = Number(req.body?.version);
+    const currentVersion = Number(run.summary?.editable_offer_version || 1);
+    if (!Number.isInteger(expectedVersion) || expectedVersion !== currentVersion) {
+      res.status(409).json({
+        ok: false,
+        error: 'editable_offer_conflict',
+        current_version: currentVersion,
+        editable_offer: run.summary?.editable_offer || null
+      });
+      return;
+    }
     const editableOffer = buildEditableOfferState(run, {
       editable_offer: req.body?.editable_offer || req.body || {}
     }).editable_offer;
+    const nextVersion = currentVersion + 1;
     const updated = await updateOfferRun(run.id, {
       summary: {
         ...(run.summary || {}),
-        editable_offer: editableOffer
+        editable_offer: editableOffer,
+        editable_offer_version: nextVersion
       }
     }, req.tenantContext);
     await appendOfferRunEvent(run.id, {
@@ -788,7 +801,11 @@ export function createAdminApp(options = {}) {
       message: 'Editable offer settings updated',
       metadata: { editable_offer: editableOffer }
     }, req.tenantContext);
-    res.json({ ok: true, editable_offer: updated.summary?.editable_offer || editableOffer });
+    res.json({
+      ok: true,
+      editable_offer: updated.summary?.editable_offer || editableOffer,
+      version: updated.summary?.editable_offer_version || nextVersion
+    });
   } catch (error) {
     res.status(error.statusCode || 500).json({ ok: false, error: error.message });
   }
