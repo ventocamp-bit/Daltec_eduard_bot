@@ -77,6 +77,7 @@ historyListEl.addEventListener('click', openHistoryRun);
 sendReviewDigestButton.addEventListener('click', sendReviewDigest);
 runDetailCloseEl.addEventListener('click', () => {
   runDetailEl.hidden = true;
+  contentShell.classList.remove('review-detail-active');
   activeDraftPreviewForm = null;
   preview().catch((error) => setStatus(error.message));
 });
@@ -804,6 +805,7 @@ async function renderRunDetail(runId, options = {}) {
   ]);
   runDetailBodyEl.innerHTML = runDetailHtml(run, { ...options, reviewState });
   runDetailEl.hidden = false;
+  contentShell.classList.add('review-detail-active');
   runDetailEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   const form = runDetailBodyEl.querySelector('[data-draft-review-form]');
   if (form) {
@@ -899,8 +901,8 @@ function runDetailHtml(run, options = {}) {
 
       <div class="draft-message" data-draft-message hidden></div>
       <div class="draft-actions"${readOnly ? ' hidden' : ''}>
-        <button type="button" class="danger" data-reject-draft>✗ Ablehnen</button>
-        <button type="submit" data-send-draft${sendDisabled}>${testMode ? 'Test-Draft' : '✓ Mail senden'}</button>
+        <button type="button" class="danger" data-reject-draft>Ablehnen</button>
+        <button type="submit" data-send-draft${sendDisabled}>${testMode ? 'Test-Draft' : 'Mail senden'}</button>
       </div>
     </form>
   `;
@@ -915,7 +917,7 @@ function customerEmailCopyBannerHtml(email) {
   if (!value) return '';
   return `
     <button type="button" class="customer-email-copy" data-copy-customer-email data-email="${escapeHtml(value)}">
-      <span class="customer-email-copy-value">📋 ${escapeHtml(value)}</span>
+      <span class="customer-email-copy-value">&#128203; ${escapeHtml(value)}</span>
       <small data-copy-label>Klicken zum Kopieren</small>
     </button>
   `;
@@ -1274,7 +1276,7 @@ async function sendEditedDraft(event, runId) {
       return;
     }
     button.disabled = false;
-    button.textContent = '✓ Mail senden';
+    button.textContent = 'Mail senden';
     message.hidden = false;
     message.className = 'draft-message error';
     message.textContent = error.message;
