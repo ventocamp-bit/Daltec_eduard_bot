@@ -401,6 +401,7 @@ test('review draft html composer preserves n8n table styling and edited prices',
 
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
   const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
+  const indexSource = await fs.readFile(path.join('src', 'admin', 'public', 'index.html'), 'utf8');
   const stylesSource = await fs.readFile(path.join('src', 'admin', 'public', 'styles.css'), 'utf8');
   assert.match(appSource, /data-draft-field="to" type="email" value="\$\{escapeHtml\(draft\.to\)\}"/);
   assert.match(appSource, /data-copy-customer-email/);
@@ -427,7 +428,13 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /form\.addEventListener\('input', \(event\) => handleDraftReviewInput\(event, form\)\)/);
   assert.match(appSource, /sanitizeMoneyInput\(input\)/);
   assert.match(appSource, /syncGrossNetPair\(row, fieldBase, source\)/);
-  assert.match(appSource, /data-toggle-price-mode/);
+  assert.match(appSource, /PRICE_INPUT_MODE_STORAGE_KEY/);
+  assert.match(appSource, /reviewPriceInputMode\(\)/);
+  assert.doesNotMatch(appSource, /data-toggle-price-mode/);
+  assert.doesNotMatch(appSource, /price-mode-toggle/);
+  assert.match(indexSource, /Preiseingabe Standard/);
+  assert.match(indexSource, /name="reviewPriceInputMode" type="radio" value="gross"/);
+  assert.match(indexSource, /name="reviewPriceInputMode" type="radio" value="net"/);
   assert.match(appSource, /data-price-field="offerNet"/);
   assert.match(appSource, /data-price-field="uvpGross"/);
   assert.match(appSource, /readonly aria-readonly="true"/);

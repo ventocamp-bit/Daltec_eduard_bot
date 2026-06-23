@@ -49,9 +49,11 @@ const productGroupsEl = document.querySelector('#product-groups');
 const addProductGroupButton = document.querySelector('#add-product-group');
 const priceRulesEl = document.querySelector('#price-rules');
 const addPriceRuleButton = document.querySelector('#add-price-rule');
+const reviewPriceInputModeInputs = Array.from(document.querySelectorAll('[name="reviewPriceInputMode"]'));
 const navButtons = Array.from(document.querySelectorAll('[data-panel-target]'));
 const panelViews = Array.from(document.querySelectorAll('.panel-view'));
 const contentShell = document.querySelector('.content-shell');
+const PRICE_INPUT_MODE_STORAGE_KEY = 'eduard:review-price-input-mode';
 let currentSettings = {};
 let activeDraftPreviewForm = null;
 
@@ -80,6 +82,7 @@ productGroupsEl.addEventListener('click', removeProductGroup);
 priceRulesEl.addEventListener('input', () => schedulePreview());
 priceRulesEl.addEventListener('change', () => schedulePreview());
 priceRulesEl.addEventListener('click', removePriceRule);
+reviewPriceInputModeInputs.forEach((input) => input.addEventListener('change', handleReviewPriceInputModeChange));
 loginForm.addEventListener('submit', login);
 form.addEventListener('input', () => schedulePreview());
 form.addEventListener('change', () => schedulePreview());
@@ -100,6 +103,7 @@ function activatePanel(panelId) {
 async function boot() {
   hideLocalLoginInProduction();
   hideLegacyCategoryDiscountInputs();
+  initializeReviewPriceInputMode();
   try {
     await request('/api/auth/me');
     showApp();
@@ -120,6 +124,28 @@ function hideLocalLoginInProduction() {
   if (localLoginEl && !['localhost', '127.0.0.1'].includes(window.location.hostname)) {
     localLoginEl.hidden = true;
   }
+}
+
+function initializeReviewPriceInputMode() {
+  const mode = reviewPriceInputMode();
+  reviewPriceInputModeInputs.forEach((input) => {
+    input.checked = input.value === mode;
+  });
+}
+
+function handleReviewPriceInputModeChange(event) {
+  const mode = event.target.value === 'net' ? 'net' : 'gross';
+  localStorage.setItem(PRICE_INPUT_MODE_STORAGE_KEY, mode);
+  initializeReviewPriceInputMode();
+  if (activeDraftPreviewForm) {
+    applyDraftPriceInputMode(activeDraftPreviewForm, mode);
+    recalculateDraftTotals(activeDraftPreviewForm);
+    syncDraftPreview(activeDraftPreviewForm);
+  }
+}
+
+function reviewPriceInputMode() {
+  return localStorage.getItem(PRICE_INPUT_MODE_STORAGE_KEY) === 'net' ? 'net' : 'gross';
 }
 
 async function login(event) {
@@ -786,6 +812,7 @@ function runDetailHtml(run, options = {}) {
   const testMode = isOnboardingTestRun(run);
   const disabled = readOnly ? ' disabled' : '';
   const sendDisabled = testMode ? ' disabled' : '';
+  const priceInputMode = reviewPriceInputMode();
   return `
     <form class="draft-review" data-draft-review-form>
       <div class="draft-review-head">
@@ -818,7 +845,6 @@ function runDetailHtml(run, options = {}) {
           <thead>
             <tr>
               <th>Position</th>
-              <th>Eingabe</th>
               <th>UVP netto</th>
               <th>UVP brutto</th>
               <th>Angebot netto</th>
@@ -826,7 +852,7 @@ function runDetailHtml(run, options = {}) {
             </tr>
           </thead>
           <tbody>
-          ${draft.rows.map((row) => draftPriceRowHtml(row, { readOnly })).join('')}
+          ${draft.rows.map((row) => draftPriceRowHtml(row, { readOnly, inputMode: priceInputMode })).join('')}
           </tbody>
         </table>
         <button type="button" class="secondary add-draft-row" data-add-draft-row${readOnly ? ' hidden' : ''}>+ Zeile hinzuf&uuml;gen</button>
@@ -868,25 +894,21 @@ function customerEmailCopyBannerHtml(email) {
 
 function draftPriceRowHtml(row, options = {}) {
   const calculated = ['total', 'vat', 'gross'].includes(row.type);
-  const mode = row.inputMode === 'net' ? 'net' : 'gross';
+  const mode = options.inputMode === 'net' ? 'net' : 'gross';
   const rowLocked = calculated || options.readOnly;
   const productReadonly = rowLocked ? ' readonly aria-readonly="true"' : '';
   const netReadonly = rowLocked || mode !== 'net' ? ' readonly aria-readonly="true"' : '';
   const grossReadonly = rowLocked || mode !== 'gross' ? ' readonly aria-readonly="true"' : '';
-  const modeCell = rowLocked
-    ? '<span class="price-mode-label">Automatisch</span>'
-    : `<button type="button" class="price-mode-toggle" data-toggle-price-mode>${mode === 'net' ? 'Brutto eingeben' : 'Netto eingeben'}</button>`;
   const deleteButton = !calculated && !options.readOnly
     ? '<button type="button" class="row-delete" data-delete-draft-row aria-label="Zeile löschen">×</button>'
     : '';
   return `
     <tr class="editable-price-row ${escapeHtml(row.type || 'item')}" data-price-row data-row-type="${escapeHtml(row.type || 'item')}" data-price-mode="${mode}"${calculated ? ' data-calculated-row' : ''}>
       <td><input data-price-field="product" type="text" value="${escapeHtml(row.product)}"${productReadonly}>${deleteButton}</td>
-      <td>${modeCell}</td>
-      <td><input data-price-field="uvpNet" type="text" inputmode="decimal" value="${escapeHtml(row.uvpNet || '')}"${netReadonly}></td>
-      <td><input data-price-field="uvpGross" type="text" inputmode="decimal" value="${escapeHtml(row.uvpGross || row.uvp)}"${grossReadonly}></td>
-      <td><input data-price-field="offerNet" type="text" inputmode="decimal" value="${escapeHtml(row.offerNet || '')}"${netReadonly}></td>
-      <td><input data-price-field="offerGross" type="text" inputmode="decimal" value="${escapeHtml(row.offerGross || row.offer)}"${grossReadonly}></td>
+      <td><span class="price-field-label">Netto</span><input data-price-field="uvpNet" type="text" inputmode="decimal" value="${escapeHtml(row.uvpNet || '')}"${netReadonly}></td>
+      <td><span class="price-field-label">Brutto</span><input data-price-field="uvpGross" type="text" inputmode="decimal" value="${escapeHtml(row.uvpGross || row.uvp)}"${grossReadonly}></td>
+      <td><span class="price-field-label">Netto</span><input data-price-field="offerNet" type="text" inputmode="decimal" value="${escapeHtml(row.offerNet || '')}"${netReadonly}></td>
+      <td><span class="price-field-label">Brutto</span><input data-price-field="offerGross" type="text" inputmode="decimal" value="${escapeHtml(row.offerGross || row.offer)}"${grossReadonly}></td>
     </tr>
   `;
 }
@@ -1017,8 +1039,7 @@ function draftRows(run) {
       uvpGross: formatPriceInput(Number(position.uvp_netto || 0) * 1.2),
       offerNet: formatPriceInput(Number(position.angebot_netto || 0)),
       offerGross: formatPriceInput(Number(position.angebot_netto || 0) * 1.2),
-      type: 'item',
-      inputMode: 'gross'
+      type: 'item'
     }))
     : items.map((item) => ({
       product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
@@ -1026,8 +1047,7 @@ function draftRows(run) {
       uvpGross: formatPriceInput(item.preis_mail_brutto_num || item.price || 0),
       offerNet: formatPriceInput((item.preis_mail_brutto_num || item.price || 0) / 1.2),
       offerGross: formatPriceInput(item.preis_mail_brutto_num || item.price || 0),
-      type: 'item',
-      inputMode: 'gross'
+      type: 'item'
     }));
   rows.push(
     { product: 'Gesamt netto', uvpNet: formatPriceInput(pricing.gesamt_uvp_netto || pricing.totalUvpNet || 0), offerNet: formatPriceInput(pricing.gesamt_angebot_netto || 0), type: 'total' },
@@ -1108,15 +1128,6 @@ function handleDraftTableClick(event, form) {
     return;
   }
 
-  const toggleButton = event.target.closest('[data-toggle-price-mode]');
-  if (toggleButton) {
-    const row = toggleButton.closest('[data-price-row]');
-    toggleDraftPriceMode(row);
-    recalculateDraftTotals(form);
-    syncDraftPreview(form);
-    return;
-  }
-
   const deleteButton = event.target.closest('[data-delete-draft-row]');
   if (deleteButton) {
     const row = deleteButton.closest('[data-price-row]');
@@ -1177,9 +1188,8 @@ function addDraftItemRow(form) {
     uvpGross: formatPriceInput(0),
     offerNet: formatPriceInput(0),
     offerGross: formatPriceInput(0),
-    type: 'item',
-    inputMode: 'gross'
-  }).trim();
+    type: 'item'
+  }, { inputMode: reviewPriceInputMode() }).trim();
   tbody.insertBefore(template.content.firstElementChild, firstCalculatedRow);
 }
 
@@ -1198,22 +1208,23 @@ function handleDraftReviewInput(event, form) {
   syncDraftPreview(form);
 }
 
-function toggleDraftPriceMode(row) {
-  if (!row || row.hasAttribute('data-calculated-row')) return;
-  const nextMode = row.dataset.priceMode === 'net' ? 'gross' : 'net';
-  row.dataset.priceMode = nextMode;
-  row.querySelector('[data-toggle-price-mode]').textContent = nextMode === 'net' ? 'Brutto eingeben' : 'Netto eingeben';
-  setPriceReadonly(row, 'uvpNet', nextMode !== 'net');
-  setPriceReadonly(row, 'offerNet', nextMode !== 'net');
-  setPriceReadonly(row, 'uvpGross', nextMode !== 'gross');
-  setPriceReadonly(row, 'offerGross', nextMode !== 'gross');
-}
-
 function setPriceReadonly(row, field, readonly) {
   const input = row.querySelector(`[data-price-field="${field}"]`);
   if (!input) return;
   input.readOnly = readonly;
   input.setAttribute('aria-readonly', String(readonly));
+}
+
+function applyDraftPriceInputMode(form, mode = reviewPriceInputMode()) {
+  Array.from(form.querySelectorAll('[data-price-row]'))
+    .filter((row) => !row.hasAttribute('data-calculated-row'))
+    .forEach((row) => {
+      row.dataset.priceMode = mode;
+      setPriceReadonly(row, 'uvpNet', mode !== 'net');
+      setPriceReadonly(row, 'offerNet', mode !== 'net');
+      setPriceReadonly(row, 'uvpGross', mode !== 'gross');
+      setPriceReadonly(row, 'offerGross', mode !== 'gross');
+    });
 }
 
 function sanitizeMoneyInput(input) {

@@ -949,6 +949,30 @@ iframe {
   font-weight: 600;
 }
 
+.price-input-default {
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.price-input-default strong {
+  flex-basis: 100%;
+}
+
+.price-input-default label {
+  align-items: center;
+  display: inline-flex;
+  gap: 7px;
+}
+
+.price-input-default span {
+  color: #6b7280;
+  font-size: 12px;
+}
+
 .draft-section {
   display: grid;
   gap: 8px;
@@ -994,14 +1018,14 @@ iframe {
   text-align: left;
 }
 
+.editable-price-table th:nth-child(2),
 .editable-price-table th:nth-child(3),
 .editable-price-table th:nth-child(4),
 .editable-price-table th:nth-child(5),
-.editable-price-table th:nth-child(6),
+.editable-price-table td:nth-child(2),
 .editable-price-table td:nth-child(3),
 .editable-price-table td:nth-child(4),
-.editable-price-table td:nth-child(5),
-.editable-price-table td:nth-child(6) {
+.editable-price-table td:nth-child(5) {
   text-align: right;
 }
 
@@ -1063,32 +1087,20 @@ iframe {
   font-size: 16px;
 }
 
-.editable-price-row td:nth-child(5) input,
-.editable-price-row td:nth-child(6) input {
+.editable-price-row td:nth-child(4) input,
+.editable-price-row td:nth-child(5) input {
   color: #c00000;
   font-weight: 700;
 }
 
-.price-mode-label,
-.price-mode-toggle {
+.price-field-label {
+  color: #4b5563;
   display: block;
   font-size: 12px;
-  padding: 8px;
-  text-align: center;
+  font-weight: 700;
+  padding: 6px 8px 0;
+  text-align: inherit;
   white-space: nowrap;
-}
-
-.price-mode-toggle {
-  background: #fff;
-  border: 0;
-  border-radius: 0;
-  color: #111827;
-  cursor: pointer;
-  width: 100%;
-}
-
-.price-mode-toggle:hover {
-  background: #f3f4f6;
 }
 
 .row-delete {
