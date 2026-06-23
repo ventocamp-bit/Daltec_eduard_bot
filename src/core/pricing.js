@@ -1,6 +1,13 @@
 import { parseEuroNumber } from './format.js';
+import {
+  findEduardProductForLineItem,
+  loadEduardLegacyPriceRows,
+  parseLegacyConfiguratorGross,
+  productToOfferPosition
+} from './product-catalog.js';
 
 export function calculateInquiryOffer(inquiry, preisliste = [], settings = {}) {
+  const masterPriceRows = preisliste.length ? preisliste : loadEduardLegacyPriceRows();
   let serviceSummeNetto = 0;
   const positionen = [];
   const prices = (inquiry.line_items || []).map((item) => Number(item.preis_mail_brutto_num) || 0);
@@ -11,10 +18,16 @@ export function calculateInquiryOffer(inquiry, preisliste = [], settings = {}) {
     let nameLower = cleanName.toLowerCase();
     let preisNetto = Number(item.preis_mail_brutto_num) || 0;
 
-    if (item.is_sku_not_found === true) {
-      const master = preisliste.find((entry) => entry.Produktcode && String(entry.Produktcode).includes(cleanName));
+    const catalogProduct = findEduardProductForLineItem(item);
+    if (catalogProduct && (item.is_sku_not_found === true || preisNetto === 0)) {
+      const catalogPosition = productToOfferPosition(catalogProduct);
+      preisNetto = catalogPosition.uvp_netto;
+      cleanName = catalogPosition.produkt_name;
+      nameLower = cleanName.toLowerCase();
+    } else if (item.is_sku_not_found === true) {
+      const master = masterPriceRows.find((entry) => entry.Produktcode && String(entry.Produktcode).includes(cleanName));
       if (master) {
-        preisNetto = parseEuroNumber(master['Bruttopreis (Konfigurator)']) / 1.2;
+        preisNetto = parseLegacyConfiguratorGross(master) / 1.2;
         cleanName = `${master.Typ} ${master.LxW} - ${master.KG}kg (Art.Nr: ${master.Produktcode})`;
         nameLower = cleanName.toLowerCase();
       }
@@ -31,10 +44,24 @@ export function calculateInquiryOffer(inquiry, preisliste = [], settings = {}) {
     if (/coc|typisierung|service|bereitstellung/.test(nameLower)) {
       serviceSummeNetto += preisNetto;
     } else {
+      const catalogPosition = catalogProduct ? productToOfferPosition(catalogProduct) : null;
+      const catalogMeta = catalogPosition ? {
+        produktcode: catalogPosition.produktcode,
+        product_family: catalogPosition.product_family,
+        use_case: catalogPosition.use_case,
+        length_mm: catalogPosition.length_mm,
+        width_mm: catalogPosition.width_mm,
+        gross_weight_kg: catalogPosition.gross_weight_kg,
+        braked: catalogPosition.braked,
+        has_ramps: catalogPosition.has_ramps,
+        ramp_type: catalogPosition.ramp_type,
+        control_type: catalogPosition.control_type
+      } : {};
       positionen.push({
-        produkt_name: cleanName,
+        produkt_name: catalogPosition?.produkt_name || cleanName,
         uvp_netto: preisNetto,
-        kategorie: resolveProductCategory(cleanName, settings.pricing)
+        kategorie: catalogPosition?.kategorie || resolveProductCategory(cleanName, settings.pricing),
+        ...catalogMeta
       });
     }
   }
@@ -103,6 +130,7 @@ export function calculate(items, pricing = {}) {
         : 0;
       const rabattNetto = item.uvp_netto - itemAngebotNetto;
       return {
+        ...item,
         produkt_name: item.produkt_name,
         kategorie: item.kategorie || 'zubehoer',
         input_price_netto: Number(item.uvp_netto.toFixed(2)),

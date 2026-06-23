@@ -4,6 +4,7 @@ import { extractInquiry } from '../src/core/parser.js';
 import { buildOfferEmail } from '../src/core/email-template.js';
 import { calculateInquiryOffer, resolveProductCategory } from '../src/core/pricing.js';
 import { matchInventory, getTrailerType } from '../src/core/inventory.js';
+import { findEduardProductByCode, loadEduardProductCatalog } from '../src/core/product-catalog.js';
 import { validateInventoryCsv } from '../src/core/csv-validator.js';
 import { atomicWriteFile, decodeCsvBuffer, readCsvObjects } from '../src/adapters/local-data.js';
 import { runWorkflow } from '../src/workflow.js';
@@ -39,6 +40,46 @@ test('extracts customer and line items from Eduard HTML table', () => {
   assert.equal(result.kunde_vorname, 'Max');
   assert.equal(result.kunde_email, 'max@example.com');
   assert.equal(result.line_items.length, 2);
+});
+
+test('loads complete Eduard product catalog with normalized product semantics', () => {
+  const catalog = loadEduardProductCatalog();
+  const product = findEduardProductByCode('2014-1-P3-0756');
+
+  assert.equal(catalog.meta.generatedFromRows, 6201);
+  assert.equal(catalog.products.length, 6201);
+  assert.equal(product.family, 'hochlader');
+  assert.equal(product.useCase, 'standardtransport');
+  assert.equal(product.lengthMm, 2010);
+  assert.equal(product.widthMm, 1450);
+  assert.equal(product.braked, false);
+  assert.equal(product.wallHeightCm, 30);
+});
+
+test('prices SKU-only Eduard requests from the product catalog', () => {
+  const inquiry = {
+    line_items: [{
+      produkt_name_original: '2014-1-P3-0756',
+      preis_mail_brutto_num: 0,
+      is_sku_not_found: true,
+      artikelnummer: '2014-1-P3-0756'
+    }]
+  };
+
+  const result = calculateInquiryOffer(inquiry, [], {
+    pricing: { categoryDiscounts: { anhaenger: 13 }, roundTo: 10, vatRate: 0.2 }
+  });
+  const position = result.kalkulation_anfrage.positionen[0];
+
+  assert.match(position.produkt_name, /Cargo-Hochlader 201x145 - 750kg/);
+  assert.equal(position.kategorie, 'anhaenger');
+  assert.equal(position.produktcode, '2014-1-P3-0756');
+  assert.equal(position.product_family, 'hochlader');
+  assert.equal(position.length_mm, 2010);
+  assert.equal(position.width_mm, 1450);
+  assert.equal(position.gross_weight_kg, 750);
+  assert.equal(result.kalkulation_anfrage.price_source, 'eduard_mail');
+  assert.equal(result.kalkulation_anfrage.gesamt_uvp_brutto, 1145.83);
 });
 
 test('extracts Czech Eduard inquiries without treating CZK as Euro', () => {
@@ -394,6 +435,33 @@ test('applies inventory EK markup rules for matching stock offers', () => {
   assert.equal(result.kalkulation_lager.gesamt_angebot_brutto, 1500);
   assert.equal(result.kalkulation_lager.price_source, 'lagerwert_ek_markup');
   assert.equal(result.kalkulation_lager.applied_rules[0].type, 'ek_markup');
+});
+
+test('uses bundled Eduard product catalog for inventory master prices without explicit preisliste', () => {
+  const input = {
+    line_items: [{ produkt_name_original: 'Cargo-Hochlader 201x145 750kg', preis_mail_brutto_num: 1145.83 }],
+    kalkulation_anfrage: {}
+  };
+  const lager = [{
+    Lager: '1',
+    'Art.-Nr.': '2014-1-P3-0756',
+    'Art.-Bez.': 'Cargo-Hochlader 201x145 750kg H=56cm',
+    Lagermenge: '1',
+    Lagerwert: '500,00',
+    Laenge: '2010',
+    Breite: '1450',
+    hzGGew: '750'
+  }];
+
+  const result = matchInventory(input, lager, [], {
+    pricing: { offerFactor: 0.87, roundTo: 10, vatRate: 0.2 }
+  });
+
+  assert.equal(result.hat_match, true);
+  assert.equal(result.kalkulation_lager.price_source, 'master_price_list');
+  assert.equal(result.kalkulation_lager.gesamt_uvp_brutto, 1145.83);
+  assert.equal(result.kalkulation_lager.gesamt_angebot_brutto, 1000);
+  assert.match(result.kalkulation_lager.positionen[0].produkt_name, /2014-1-P3-0756/);
 });
 
 test('flags inventory prices that would show a negative discount', () => {

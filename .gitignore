@@ -8,6 +8,7 @@ data/*.json
 data/*.csv
 !data/settings.example.json
 !data/lager-preis-muster.csv
+!data/eduard-product-catalog.json
 data/tenant.json
 data/offers.jsonl
 data/inbound_messages.jsonl
