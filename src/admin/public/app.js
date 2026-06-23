@@ -721,7 +721,9 @@ async function renderRunDetail(runId) {
     form.addEventListener('submit', (event) => sendEditedDraft(event, run.id));
     form.addEventListener('input', () => syncDraftPreview(form));
     form.addEventListener('change', () => syncDraftPreview(form));
-    syncDraftPreview(form);
+    previewFrame.srcdoc = draftOriginalHtml(run) || buildEditedDraftPayload(form).html;
+    previewStateLabel.textContent = 'HTML';
+    setStatus('Original Draft Vorschau geladen');
   }
   runDetailBodyEl.querySelector('[data-reject-draft]')?.addEventListener('click', () => rejectDraft(run.id));
   setStatus('Draft Review geladen');
@@ -753,15 +755,10 @@ function runDetailHtml(run) {
         <strong>Preistabelle</strong>
         <div class="editable-price-table" data-draft-table>
           <div class="editable-price-row editable-price-header">
-            <span>Produkt</span><span>UVP</span><span>Rabatt</span><span>Angebot</span>
+            <span>Position</span><span>UVP brutto</span><span>Angebot brutto</span>
           </div>
           ${draft.rows.map((row) => draftPriceRowHtml(row)).join('')}
         </div>
-      </section>
-
-      <section class="draft-section">
-        <strong>Hinweise</strong>
-        <textarea data-draft-field="notes" rows="4">${escapeHtml(draft.notes)}</textarea>
       </section>
 
       <section class="draft-section">
@@ -783,7 +780,6 @@ function draftPriceRowHtml(row) {
     <div class="editable-price-row ${escapeHtml(row.type || '')}" data-price-row data-row-type="${escapeHtml(row.type || '')}">
       <input data-price-field="product" type="text" value="${escapeHtml(row.product)}">
       <input data-price-field="uvp" type="text" value="${escapeHtml(row.uvp)}">
-      <input data-price-field="discount" type="text" value="${escapeHtml(row.discount)}">
       <input data-price-field="offer" type="text" value="${escapeHtml(row.offer)}">
     </div>
   `;
@@ -802,9 +798,12 @@ function draftReviewState(run) {
     subject,
     intro: paragraphs[0] || defaultIntro(customerName),
     rows: draftRows(run),
-    notes: run.error_message || '',
     signature: paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})
   };
+}
+
+function draftOriginalHtml(run) {
+  return run.draft?.html_body || run.draft_html || '';
 }
 
 function draftParagraphs(html) {
@@ -838,14 +837,13 @@ function draftRows(run) {
   const rows = items.map((item) => ({
     product: item.produkt_name_original || item.name || item.produkt || 'Produkt',
     uvp: formatMoney(item.preis_mail_brutto_num || item.price || 0),
-    discount: '',
     offer: formatMoney(item.preis_mail_brutto_num || item.price || 0),
     type: ''
   }));
   rows.push(
-    { product: 'Gesamt netto', uvp: formatMoney(pricing.gesamt_uvp_netto || pricing.totalUvpNet || 0), discount: formatMoney(pricing.gesamt_rabatt_netto || 0), offer: formatMoney(pricing.gesamt_angebot_netto || 0), type: 'total' },
-    { product: '20% MwSt', uvp: '', discount: '', offer: formatMoney(pricing.mwst_betrag || pricing.vat_amount || 0), type: 'total' },
-    { product: 'Gesamt brutto', uvp: formatMoney(pricing.gesamt_uvp_brutto || pricing.uvpGross || 0), discount: formatMoney(pricing.gesamt_rabatt_brutto || 0), offer: formatMoney(pricing.gesamt_angebot_brutto || run.summary?.totalGross || 0), type: 'gross' }
+    { product: 'Gesamt netto', uvp: formatMoney(pricing.gesamt_uvp_netto || pricing.totalUvpNet || 0), offer: formatMoney(pricing.gesamt_angebot_netto || 0), type: 'total' },
+    { product: '20% MwSt', uvp: '', offer: formatMoney(pricing.mwst_betrag || pricing.vat_amount || 0), type: 'total' },
+    { product: 'Gesamt brutto', uvp: formatMoney(pricing.gesamt_uvp_brutto || pricing.uvpGross || 0), offer: formatMoney(pricing.gesamt_angebot_brutto || run.summary?.totalGross || 0), type: 'gross' }
   );
   return rows;
 }
@@ -897,11 +895,10 @@ function buildEditedDraftPayload(form) {
       type: row.dataset.rowType || '',
       product: row.querySelector('[data-price-field="product"]').value,
       uvp: row.querySelector('[data-price-field="uvp"]').value,
-      discount: row.querySelector('[data-price-field="discount"]').value,
       offer: row.querySelector('[data-price-field="offer"]').value
     })),
-    notes: form.querySelector('[data-draft-field="notes"]').value,
-    signature: form.querySelector('[data-draft-field="signature"]').value
+    signature: form.querySelector('[data-draft-field="signature"]').value,
+    settings: currentSettings
   });
   return { to, subject, html };
 }

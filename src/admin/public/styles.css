@@ -862,7 +862,7 @@ iframe {
 
 .editable-price-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1.5fr) repeat(3, minmax(110px, 0.75fr));
+  grid-template-columns: minmax(260px, 1.5fr) repeat(2, minmax(130px, 0.75fr));
 }
 
 .editable-price-row > span,
@@ -887,23 +887,13 @@ iframe {
   font-weight: 700;
 }
 
-.editable-price-row input[data-price-field="discount"] {
-  color: #c00000;
-  font-weight: 700;
-}
-
 .editable-price-row.total input {
-  background: #f9f9f9;
+  font-weight: 700;
 }
 
 .editable-price-row.gross input {
-  background: #FFC000;
-  color: #000;
-  font-weight: 700;
-}
-
-.editable-price-row.gross input[data-price-field="discount"] {
   color: #c00000;
+  font-weight: 700;
 }
 
 .draft-actions {
