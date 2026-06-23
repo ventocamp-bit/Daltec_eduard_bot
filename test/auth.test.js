@@ -501,6 +501,8 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);
   assert.match(appSource, /data-draft-extra-tables/);
   assert.match(appSource, /draftExtraTables\(run\)/);
+  assert.match(appSource, /match\.hasInventoryMatch === true/);
+  assert.match(appSource, /match\.topInventoryName/);
   assert.match(appSource, /SOFORT AB LAGER VERFÜGBAR/);
   assert.match(appSource, /const html = buildEditedDraftHtml\(\{/);
   assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);

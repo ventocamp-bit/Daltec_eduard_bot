@@ -1036,12 +1036,13 @@ function draftRows(run) {
 function draftExtraTables(run) {
   const match = run.match_json || {};
   const lagerCalc = match.kalkulation_lager;
-  if (!match.hat_match || !lagerCalc) return [];
+  const hasInventoryMatch = match.hat_match === true || match.hasInventoryMatch === true;
+  if (!hasInventoryMatch || !lagerCalc) return [];
   const rows = draftRowsFromCalc(lagerCalc);
   if (!rows.length) return [];
   return [{
     title: 'SOFORT AB LAGER VERFÜGBAR',
-    intro: `Passendes Lagerfahrzeug: ${match.top_lager_name || run.summary?.topInventoryName || 'Lagerfahrzeug'}`,
+    intro: `Passendes Lagerfahrzeug: ${match.top_lager_name || match.topInventoryName || run.summary?.topInventoryName || 'Lagerfahrzeug'}`,
     rows
   }];
 }
