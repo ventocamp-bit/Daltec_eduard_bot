@@ -829,6 +829,7 @@ function runDetailHtml(run, options = {}) {
         </table>
         <button type="button" class="secondary add-draft-row" data-add-draft-row${readOnly ? ' hidden' : ''}>+ Zeile hinzuf&uuml;gen</button>
       </section>
+      <script type="application/json" data-draft-extra-tables>${jsonScriptContent(draft.extraTables)}</script>
 
       <section class="draft-section">
         <strong>Hinweise (optional)</strong>
@@ -895,6 +896,7 @@ function draftReviewState(run) {
     subject,
     intro: paragraphs[0] || defaultIntro(customerName),
     rows: draftRows(run),
+    extraTables: draftExtraTables(run),
     notes: draftNotesFromHtml(draftOriginalHtml(run)),
     signature: paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})
   };
@@ -1031,6 +1033,44 @@ function draftRows(run) {
   return rows;
 }
 
+function draftExtraTables(run) {
+  const match = run.match_json || {};
+  const lagerCalc = match.kalkulation_lager;
+  if (!match.hat_match || !lagerCalc) return [];
+  const rows = draftRowsFromCalc(lagerCalc);
+  if (!rows.length) return [];
+  return [{
+    title: 'SOFORT AB LAGER VERFÜGBAR',
+    intro: `Passendes Lagerfahrzeug: ${match.top_lager_name || run.summary?.topInventoryName || 'Lagerfahrzeug'}`,
+    rows
+  }];
+}
+
+function draftRowsFromCalc(calc = {}) {
+  const positions = Array.isArray(calc.positionen) ? calc.positionen : [];
+  const rows = positions.map((position) => {
+    const uvpNet = Number(position.uvp_netto || 0);
+    const offerNet = Number(position.angebot_netto || 0);
+    return {
+      product: position.produkt_name || 'Produkt',
+      uvp: formatMoney(uvpNet),
+      discount: formatMoney(uvpNet - offerNet),
+      offer: formatMoney(offerNet),
+      type: 'item'
+    };
+  });
+  if (!rows.length) return [];
+  const uvpNet = Number(calc.gesamt_uvp_netto || calc.gesamt_uvp_brutto / 1.2 || 0);
+  const offerNet = Number(calc.gesamt_angebot_netto || calc.gesamt_angebot_brutto / 1.2 || 0);
+  const discountNet = Number(calc.gesamt_rabatt_netto || calc.gesamt_rabatt_brutto / 1.2 || (uvpNet - offerNet));
+  rows.push(
+    { product: 'Gesamt netto', uvp: formatMoney(uvpNet), discount: formatMoney(discountNet), offer: formatMoney(offerNet), type: 'total' },
+    { product: '20% MwSt', uvp: formatMoney(uvpNet * 0.2), discount: formatMoney(discountNet * 0.2), offer: formatMoney(offerNet * 0.2), type: 'vat' },
+    { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: formatMoney(uvpNet * 1.2), discount: formatMoney(discountNet * 1.2), offer: formatMoney(offerNet * 1.2), type: 'gross' }
+  );
+  return rows;
+}
+
 async function sendEditedDraft(event, runId) {
   event.preventDefault();
   const form = event.currentTarget;
@@ -1076,13 +1116,19 @@ function buildEditedDraftPayload(form) {
   const subject = form.querySelector('[data-draft-field="subject"]').value.trim();
   const html = buildEditedDraftHtml({
     intro: form.querySelector('[data-draft-field="intro"]').value,
-    rows: Array.from(form.querySelectorAll('[data-price-row]')).map((row) => ({
-      type: row.dataset.rowType || '',
-      product: row.querySelector('[data-price-field="product"]').value,
-      uvp: draftMailPriceValue(row, 'uvp'),
-      discount: draftMailPriceValue(row, 'discount'),
-      offer: draftMailPriceValue(row, 'offer')
-    })),
+    tables: [
+      {
+        title: draftExtraTablesFromForm(form).length ? 'WUNSCH-KONFIGURATION' : '',
+        rows: Array.from(form.querySelectorAll('[data-price-row]')).map((row) => ({
+          type: row.dataset.rowType || '',
+          product: row.querySelector('[data-price-field="product"]').value,
+          uvp: draftMailPriceValue(row, 'uvp'),
+          discount: draftMailPriceValue(row, 'discount'),
+          offer: draftMailPriceValue(row, 'offer')
+        }))
+      },
+      ...draftExtraTablesFromForm(form)
+    ],
     notes: form.querySelector('[data-draft-field="notes"]').value,
     signature: form.querySelector('[data-draft-field="signature"]').value,
     settings: currentSettings
@@ -1094,6 +1140,20 @@ function syncDraftPreview(form) {
   previewFrame.srcdoc = buildEditedDraftPayload(form).html;
   previewStateLabel.textContent = 'Draft';
   setStatus('Draft Vorschau aktuell');
+}
+
+function draftExtraTablesFromForm(form) {
+  const source = form.querySelector('[data-draft-extra-tables]')?.textContent || '[]';
+  try {
+    const tables = JSON.parse(source);
+    return Array.isArray(tables) ? tables : [];
+  } catch {
+    return [];
+  }
+}
+
+function jsonScriptContent(value) {
+  return JSON.stringify(value || []).replace(/</g, '\\u003c');
 }
 
 function handleDraftTableClick(event, form) {

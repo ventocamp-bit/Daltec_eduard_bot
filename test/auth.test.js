@@ -416,6 +416,54 @@ test('review draft html composer never renders NaN for empty price fields', () =
   assert.doesNotMatch(html, /NaN/);
 });
 
+test('review preview without upsell renders one pricing table', () => {
+  const html = buildEditedDraftHtml({
+    intro: 'Sehr geehrte Damen und Herren',
+    rows: [
+      { product: 'Wunsch Hochlader', uvp: '€ 2.000,00', discount: '€ 100,00', offer: '€ 1.900,00' },
+      { product: 'Gesamt netto', uvp: '€ 2.000,00', discount: '€ 100,00', offer: '€ 1.900,00', type: 'total' },
+      { product: '20% MwSt', uvp: '€ 400,00', discount: '€ 20,00', offer: '€ 380,00', type: 'vat' },
+      { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '€ 2.400,00', discount: '€ 120,00', offer: '€ 2.280,00', type: 'gross' }
+    ]
+  });
+
+  assert.equal((html.match(/<table style=/g) || []).length, 1);
+  assert.doesNotMatch(html, /SOFORT AB LAGER VERF/);
+});
+
+test('review preview with upsell renders two pricing tables from same mail html source', () => {
+  const html = buildEditedDraftHtml({
+    intro: 'Sehr geehrte Damen und Herren',
+    tables: [
+      {
+        title: 'WUNSCH-KONFIGURATION',
+        rows: [
+          { product: 'Wunsch Hochlader', uvp: '€ 2.000,00', discount: '€ 100,00', offer: '€ 1.900,00' },
+          { product: 'Gesamt netto', uvp: '€ 2.000,00', discount: '€ 100,00', offer: '€ 1.900,00', type: 'total' },
+          { product: '20% MwSt', uvp: '€ 400,00', discount: '€ 20,00', offer: '€ 380,00', type: 'vat' },
+          { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '€ 2.400,00', discount: '€ 120,00', offer: '€ 2.280,00', type: 'gross' }
+        ]
+      },
+      {
+        title: 'SOFORT AB LAGER VERFÜGBAR',
+        intro: 'Passendes Lagerfahrzeug: Lager Hochlader',
+        rows: [
+          { product: 'Lager Hochlader', uvp: '€ 2.100,00', discount: '€ 150,00', offer: '€ 1.950,00' },
+          { product: 'Gesamt netto', uvp: '€ 2.100,00', discount: '€ 150,00', offer: '€ 1.950,00', type: 'total' },
+          { product: '20% MwSt', uvp: '€ 420,00', discount: '€ 30,00', offer: '€ 390,00', type: 'vat' },
+          { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '€ 2.520,00', discount: '€ 180,00', offer: '€ 2.340,00', type: 'gross' }
+        ]
+      }
+    ]
+  });
+
+  assert.equal((html.match(/<table style=/g) || []).length, 2);
+  assert.match(html, /WUNSCH-KONFIGURATION/);
+  assert.match(html, /SOFORT AB LAGER VERFÜGBAR/);
+  assert.match(html, /Lager Hochlader/);
+  assert.match(html, /background:#FFC000;font-weight:bold;color:#000/);
+});
+
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
   const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
   const stylesSource = await fs.readFile(path.join('src', 'admin', 'public', 'styles.css'), 'utf8');
@@ -451,6 +499,12 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /readonly aria-readonly="true"/);
   assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);
+  assert.match(appSource, /data-draft-extra-tables/);
+  assert.match(appSource, /draftExtraTables\(run\)/);
+  assert.match(appSource, /SOFORT AB LAGER VERFÜGBAR/);
+  assert.match(appSource, /const html = buildEditedDraftHtml\(\{/);
+  assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
+  assert.match(appSource, /request\(`\/api\/offer-runs\/\$\{encodeURIComponent\(runId\)\}\/send-to-customer`/);
 });
 
 test('onboarding source wires production self-service steps', async () => {
