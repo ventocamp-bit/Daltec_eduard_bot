@@ -770,6 +770,7 @@ async function renderRunDetail(runId, options = {}) {
         recalculateDraftTotals(form);
         syncDraftPreview(form);
       });
+      form.addEventListener('click', (event) => handleDraftTableClick(event, form));
     }
     recalculateDraftTotals(form);
     previewFrame.srcdoc = draftOriginalHtml(run) || buildEditedDraftPayload(form).html;
@@ -823,6 +824,12 @@ function runDetailHtml(run, options = {}) {
           ${draft.rows.map((row) => draftPriceRowHtml(row, { readOnly })).join('')}
           </tbody>
         </table>
+        <button type="button" class="secondary add-draft-row" data-add-draft-row${readOnly ? ' hidden' : ''}>+ Zeile hinzuf&uuml;gen</button>
+      </section>
+
+      <section class="draft-section">
+        <strong>Hinweise (optional)</strong>
+        <textarea data-draft-field="notes" rows="4"${disabled}>${escapeHtml(draft.notes)}</textarea>
       </section>
 
       <section class="draft-section">
@@ -842,9 +849,12 @@ function runDetailHtml(run, options = {}) {
 function draftPriceRowHtml(row, options = {}) {
   const calculated = ['total', 'vat', 'gross'].includes(row.type);
   const readonly = calculated || options.readOnly ? ' readonly aria-readonly="true"' : '';
+  const deleteButton = !calculated && !options.readOnly
+    ? '<button type="button" class="row-delete" data-delete-draft-row aria-label="Zeile löschen">×</button>'
+    : '';
   return `
     <tr class="editable-price-row ${escapeHtml(row.type || 'item')}" data-price-row data-row-type="${escapeHtml(row.type || 'item')}"${calculated ? ' data-calculated-row' : ''}>
-      <td><input data-price-field="product" type="text" value="${escapeHtml(row.product)}"${readonly}></td>
+      <td><input data-price-field="product" type="text" value="${escapeHtml(row.product)}"${readonly}>${deleteButton}</td>
       <td><input data-price-field="uvp" type="text" value="${escapeHtml(row.uvp)}"${readonly}></td>
       <td><input data-price-field="offer" type="text" value="${escapeHtml(row.offer)}"${readonly}></td>
     </tr>
@@ -864,6 +874,7 @@ function draftReviewState(run) {
     subject,
     intro: paragraphs[0] || defaultIntro(customerName),
     rows: draftRows(run),
+    notes: draftNotesFromHtml(draftOriginalHtml(run)),
     signature: paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})
   };
 }
@@ -935,6 +946,17 @@ function draftParagraphs(html) {
   return Array.from(doc.querySelectorAll('p'))
     .map((node) => node.textContent.trim())
     .filter(Boolean);
+}
+
+function draftNotesFromHtml(html) {
+  if (!html) return '';
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const blocks = Array.from(doc.querySelectorAll('div'));
+  const hintBlock = blocks.find((block) => {
+    const style = block.getAttribute('style') || '';
+    return /border\s*:\s*1px solid #ccc/i.test(style) || /background\s*:\s*#f9f9f9/i.test(style);
+  });
+  return hintBlock?.textContent.trim() || '';
 }
 
 function defaultIntro(customerName) {
@@ -1030,6 +1052,7 @@ function buildEditedDraftPayload(form) {
       uvp: row.querySelector('[data-price-field="uvp"]').value,
       offer: row.querySelector('[data-price-field="offer"]').value
     })),
+    notes: form.querySelector('[data-draft-field="notes"]').value,
     signature: form.querySelector('[data-draft-field="signature"]').value,
     settings: currentSettings
   });
@@ -1040,6 +1063,38 @@ function syncDraftPreview(form) {
   previewFrame.srcdoc = buildEditedDraftPayload(form).html;
   previewStateLabel.textContent = 'Draft';
   setStatus('Draft Vorschau aktuell');
+}
+
+function handleDraftTableClick(event, form) {
+  const deleteButton = event.target.closest('[data-delete-draft-row]');
+  if (deleteButton) {
+    const row = deleteButton.closest('[data-price-row]');
+    if (row && !row.hasAttribute('data-calculated-row')) {
+      row.remove();
+      recalculateDraftTotals(form);
+      syncDraftPreview(form);
+    }
+    return;
+  }
+
+  if (event.target.closest('[data-add-draft-row]')) {
+    addDraftItemRow(form);
+    recalculateDraftTotals(form);
+    syncDraftPreview(form);
+  }
+}
+
+function addDraftItemRow(form) {
+  const tbody = form.querySelector('[data-draft-table] tbody');
+  const firstCalculatedRow = tbody.querySelector('[data-calculated-row]');
+  const template = document.createElement('template');
+  template.innerHTML = draftPriceRowHtml({
+    product: '',
+    uvp: formatMoney(0),
+    offer: formatMoney(0),
+    type: 'item'
+  }).trim();
+  tbody.insertBefore(template.content.firstElementChild, firstCalculatedRow);
 }
 
 function recalculateDraftTotals(form) {

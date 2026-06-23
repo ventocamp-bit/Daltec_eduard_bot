@@ -395,7 +395,8 @@ test('review draft html composer preserves n8n table styling and edited prices',
   assert.match(html, /background:#f9f9f9;font-weight:bold;border-top:2px solid #000/);
   assert.match(html, /color:#c00000;font-weight:bold/);
   assert.match(html, /font-family:Arial,sans-serif;font-size:14px/);
-  assert.doesNotMatch(html, /Bearbeiteter Hinweis/);
+  assert.match(html, /Bearbeiteter Hinweis/);
+  assert.match(html, /border:1px solid #ccc;background:#f9f9f9;padding:20px/);
 });
 
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
@@ -406,7 +407,10 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /<table class="editable-price-table" data-draft-table>/);
   assert.match(appSource, /recalculateDraftTotals\(form\)/);
   assert.match(appSource, /data-calculated-row/);
-  assert.doesNotMatch(appSource, /data-draft-field="notes"/);
+  assert.match(appSource, /data-draft-field="notes"/);
+  assert.match(appSource, /data-delete-draft-row/);
+  assert.match(appSource, /data-add-draft-row/);
+  assert.match(appSource, /addDraftItemRow\(form\)/);
   assert.match(appSource, /previewFrame\.srcdoc = draftOriginalHtml\(run\) \|\| buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /button\.textContent = 'Sendet\.\.\.'/);
   assert.match(appSource, /draft-message ok/);
