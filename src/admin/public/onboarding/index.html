@@ -277,6 +277,15 @@
             <a class="button-link" href="/api/oauth/google/start">Gmail verbinden</a>
             <a class="button-link" href="/api/oauth/microsoft/start">Mit Microsoft verbinden</a>
           </div>
+          <section class="imap-step">
+            <h3>Eduard-Mails weiterleiten</h3>
+            <ol>
+              <li>Gmail öffnen → Einstellungen → Filter</li>
+              <li>Von: noreply@eduard.eu (oder Eduard-Absender)</li>
+              <li>Aktion: Weiterleiten an deine Eduard-Adresse</li>
+              <li>Filter erstellen</li>
+            </ol>
+          </section>
         </div>
         <div class="mail-panel" data-mail-panel="imap" hidden>
           <div class="imap-step">
@@ -344,6 +353,7 @@
         <div class="onboarding-actions">
           <button class="secondary" type="button" data-prev>Zurück</button>
           <button id="refresh-status" class="secondary" type="button">Status aktualisieren</button>
+          <button id="simulate-test-run" type="button">Ersten Draft simulieren →</button>
           <a class="button-link" href="/">Zum Dashboard</a>
         </div>
       </section>

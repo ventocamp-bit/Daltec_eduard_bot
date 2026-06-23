@@ -786,7 +786,9 @@ async function renderRunDetail(runId, options = {}) {
 function runDetailHtml(run, options = {}) {
   const draft = draftReviewState(run);
   const readOnly = options.readOnly === true;
+  const testMode = isOnboardingTestRun(run);
   const disabled = readOnly ? ' disabled' : '';
+  const sendDisabled = testMode ? ' disabled' : '';
   return `
     <form class="draft-review" data-draft-review-form>
       <div class="draft-review-head">
@@ -798,6 +800,7 @@ function runDetailHtml(run, options = {}) {
       </div>
 
       ${reviewFlagsHtml(run)}
+      ${testMode ? '<div class="review-flags">Test-Draft aus dem Onboarding - Senden ist deaktiviert.</div>' : ''}
       ${originalMailHtml(run)}
 
       <div class="inline two">
@@ -840,10 +843,14 @@ function runDetailHtml(run, options = {}) {
       <div class="draft-message" data-draft-message hidden></div>
       <div class="draft-actions"${readOnly ? ' hidden' : ''}>
         <button type="button" class="danger" data-reject-draft>✗ Ablehnen</button>
-        <button type="submit" data-send-draft>✓ Mail senden</button>
+        <button type="submit" data-send-draft${sendDisabled}>${testMode ? 'Test-Draft' : '✓ Mail senden'}</button>
       </div>
     </form>
   `;
+}
+
+function isOnboardingTestRun(run) {
+  return run?.inbound_message?.provider === 'onboarding_test';
 }
 
 function draftPriceRowHtml(row, options = {}) {

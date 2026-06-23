@@ -421,6 +421,23 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /previewStateLabel\.textContent = 'Draft'/);
 });
 
+test('onboarding source wires production self-service steps', async () => {
+  const serverSource = await fs.readFile(path.join('src', 'admin', 'server.js'), 'utf8');
+  const htmlSource = await fs.readFile(path.join('src', 'admin', 'public', 'onboarding', 'index.html'), 'utf8');
+  const jsSource = await fs.readFile(path.join('src', 'admin', 'public', 'onboarding', 'onboarding.js'), 'utf8');
+  const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
+
+  assert.match(serverSource, /res\.redirect\('\/onboarding\?mail_connected=gmail'\)/);
+  assert.match(htmlSource, /Eduard-Mails weiterleiten/);
+  assert.match(htmlSource, /Ersten Draft simulieren/);
+  assert.match(jsSource, /sampleCsvDownload\.href = '\/api\/sample-csv'/);
+  assert.match(jsSource, /Gmail verbunden:/);
+  assert.match(jsSource, /\/api\/inbound\/email/);
+  assert.match(jsSource, /onboarding_test/);
+  assert.match(appSource, /isOnboardingTestRun/);
+  assert.match(appSource, /Senden ist deaktiviert/);
+});
+
 test('review send-to-customer endpoint validates sends edited draft and marks run sent', async () => {
   const passwordHash = createPasswordHash('secret-pass');
   const sentMails = [];
