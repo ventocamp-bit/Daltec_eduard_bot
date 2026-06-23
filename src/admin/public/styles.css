@@ -955,6 +955,7 @@ iframe {
   border: 1px solid #000;
   color: #000;
   padding: 0;
+  position: relative;
 }
 
 .editable-price-table th {
@@ -1020,6 +1021,36 @@ iframe {
 .editable-price-row td:nth-child(3) input {
   color: #c00000;
   font-weight: 700;
+}
+
+.row-delete {
+  align-items: center;
+  background: #fee2e2;
+  border: 1px solid #991b1b;
+  border-radius: 50%;
+  color: #991b1b;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 14px;
+  font-weight: 700;
+  height: 22px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+}
+
+.editable-price-row.item td:first-child input {
+  padding-right: 34px;
+}
+
+.add-draft-row {
+  margin-top: 10px;
+  width: auto;
 }
 
 .draft-actions {

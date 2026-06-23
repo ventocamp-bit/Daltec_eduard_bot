@@ -1,4 +1,4 @@
-export function buildEditedDraftHtml({ intro = '', rows = [], signature = '', settings = {} }) {
+export function buildEditedDraftHtml({ intro = '', rows = [], notes = '', signature = '', settings = {} }) {
   const bodyRows = rows.map((row) => {
     if (row.type === 'section') {
       return `<tr style="background:#FFC000;font-weight:bold;color:#000;"><td colspan="3" style="border:1px solid #000;padding:8px;">${escapeHtml(row.product)}</td></tr>`;
@@ -24,6 +24,7 @@ export function buildEditedDraftHtml({ intro = '', rows = [], signature = '', se
         </thead>
         <tbody>${bodyRows}</tbody>
       </table>
+      ${notesBlockToHtml(notes)}
       ${textBlockToHtml(signature)}
     </div>
   `;
@@ -34,6 +35,11 @@ function textBlockToHtml(text) {
     .split(/\n{2,}/)
     .map((part) => `<p style="font-family:Arial,sans-serif;font-size:14px;color:#000000;max-width:800px;margin:0 auto 25px auto;text-align:left;line-height:1.5;">${escapeHtml(part).replace(/\n/g, '<br>')}</p>`)
     .join('');
+}
+
+function notesBlockToHtml(text) {
+  if (!String(text || '').trim()) return '';
+  return `<div style="font-family:Arial,sans-serif;font-size:14px;color:#000000;max-width:800px;margin:0 auto 25px auto;text-align:left;line-height:1.5;border:1px solid #ccc;background:#f9f9f9;padding:20px;">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
 }
 
 function escapeHtml(value) {
