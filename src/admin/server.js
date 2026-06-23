@@ -27,6 +27,11 @@ import { exportGmailMessages } from '../export-mails.js';
 import { extractInquiry } from '../core/parser.js';
 import { resolveProductCategory } from '../core/pricing.js';
 import { createImapPollerRegistry, resolveImapHost, testImapConnection } from '../core/imap-poller.js';
+import {
+  INVENTORY_ALTERNATIVE_RULES,
+  checkEditableOfferConsistency,
+  normalizeEditableOffer
+} from '../core/editable-offer.js';
 import { listInventoryImports } from '../inventory-import.js';
 import { processMailMessage } from '../index.js';
 import {
@@ -657,6 +662,22 @@ export function createAdminApp(options = {}) {
       return;
     }
     res.json(run);
+  } catch (error) {
+    next(error);
+  }
+  });
+
+  app.get('/api/debug/offer-runs/:id/ssot-check', async (req, res, next) => {
+  try {
+    const run = await loadOfferRun(req.params.id, req.tenantContext);
+    if (!run) {
+      res.status(404).json({ ok: false, error: 'run_not_found' });
+      return;
+    }
+    res.json({
+      ...checkEditableOfferConsistency(run),
+      inventoryAlternativeRules: INVENTORY_ALTERNATIVE_RULES
+    });
   } catch (error) {
     next(error);
   }
@@ -1492,15 +1513,6 @@ function normalizeCustomerSendPayload(input = {}) {
     subject,
     html,
     editable_offer: Object.hasOwn(input, 'editable_offer') ? normalizeEditableOffer(input.editable_offer || {}) : null
-  };
-}
-
-function normalizeEditableOffer(input = {}) {
-  const inventoryInput = input.inventory_alternative || {};
-  return {
-    inventory_alternative: {
-      enabled: inventoryInput.enabled !== false
-    }
   };
 }
 

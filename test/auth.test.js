@@ -16,6 +16,7 @@ import {
 } from '../src/admin/server.js';
 import { createFeedbackToken } from '../src/feedback-token.js';
 import { inspectRuntimeReadiness } from '../src/production-readiness.js';
+import { checkEditableOfferConsistency } from '../src/core/editable-offer.js';
 
 test('password hashes verify only the original password', () => {
   const hash = createPasswordHash('secret-pass');
@@ -140,6 +141,49 @@ test('readiness archives ignored proof runs', () => {
   assert.equal(isArchivedProofRun({ status: 'ignored' }), true);
   assert.equal(isArchivedProofRun({ status: 'completed' }), false);
   assert.equal(isArchivedProofRun({ status: 'sent_to_owner' }), false);
+});
+
+test('editable offer consistency check uses the same state for review preview and mail', () => {
+  const run = {
+    id: 'consistency-run',
+    customer_json: { email: 'kunde@example.at', first_name: 'Thomas', last_name: 'Ofner' },
+    summary: {
+      customerName: 'Thomas Ofner',
+      editable_offer: { inventory_alternative: { enabled: false } }
+    },
+    pricing_json: {
+      positionen: [{ produkt_name: '3318-4-P3-2063 Hochlader', uvp_netto: 3000, angebot_netto: 2800 }],
+      gesamt_uvp_netto: 3000,
+      gesamt_angebot_netto: 2800
+    },
+    match_json: {
+      hat_match: true,
+      top_lager_name: '4020-4-PO3-3063',
+      kalkulation_lager: {
+        positionen: [{ produkt_name: '4020-4-PO3-3063 Lagerfahrzeug', uvp_netto: 4200, angebot_netto: 3900 }],
+        gesamt_uvp_netto: 4200,
+        gesamt_angebot_netto: 3900
+      }
+    }
+  };
+
+  const hidden = checkEditableOfferConsistency(run);
+  assert.equal(hidden.ok, true);
+  assert.equal(hidden.editable_offer.inventory_alternative.enabled, false);
+  assert.equal(hidden.review.tableCount, 1);
+  assert.equal(hidden.preview.tableCount, 1);
+  assert.equal(hidden.mail.tableCount, 1);
+  assert.equal(hidden.preview.inventoryHeading, null);
+
+  const shown = checkEditableOfferConsistency({
+    ...run,
+    summary: { ...run.summary, editable_offer: { inventory_alternative: { enabled: true } } }
+  });
+  assert.equal(shown.ok, true);
+  assert.equal(shown.review.tableCount, 2);
+  assert.equal(shown.preview.tableCount, 2);
+  assert.equal(shown.mail.tableCount, 2);
+  assert.equal(shown.preview.inventoryHeading, 'SOFORT AB LAGER VERFÜGBAR');
 });
 
 test('readiness proof target can be configured by environment', () => {
@@ -503,12 +547,24 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /data-inventory-alternative-toggle/);
   assert.match(appSource, /editable_offer/);
   assert.match(appSource, /\/editable-offer/);
+  assert.match(appSource, /Mail-Vorschau f&uuml;r H&auml;ndler anzeigen/);
+  assert.match(appSource, /Dauerhaft anpassbar/);
+  assert.match(appSource, /Nur lesend/);
+  assert.match(appSource, /data-readonly-source="catalog"/);
+  assert.match(appSource, /to: form\.querySelector\('\[data-draft-field="to"\]'\)\.value\.trim\(\)/);
+  assert.match(appSource, /subject: form\.querySelector\('\[data-draft-field="subject"\]'\)\.value\.trim\(\)/);
+  assert.match(appSource, /intro: form\.querySelector\('\[data-draft-field="intro"\]'\)\.value/);
+  assert.match(appSource, /rows: editableRowsFromForm\(form\)/);
+  assert.match(appSource, /extra_tables: draftExtraTablesFromForm\(form\)/);
+  assert.match(appSource, /notes: form\.querySelector\('\[data-draft-field="notes"\]'\)\.value/);
+  assert.match(appSource, /signature: form\.querySelector\('\[data-draft-field="signature"\]'\)\.value/);
   assert.match(appSource, /if \(toggle && !toggle\.checked\) return \[\]/);
   assert.match(appSource, /draftExtraTables\(run\)/);
   assert.match(appSource, /match\.hasInventoryMatch === true/);
   assert.match(appSource, /match\.topInventoryName/);
   assert.match(appSource, /SOFORT AB LAGER VERFÜGBAR/);
-  assert.match(appSource, /const html = buildEditedDraftHtml\(\{/);
+  assert.match(appSource, /const html = buildEditedDraftHtml\(mailInputFromEditableOffer\(editable_offer\)\)/);
+  assert.match(appSource, /function mailInputFromEditableOffer\(editableOffer\)/);
   assert.match(appSource, /previewFrame\.srcdoc = buildEditedDraftPayload\(form\)\.html/);
   assert.match(appSource, /request\(`\/api\/offer-runs\/\$\{encodeURIComponent\(runId\)\}\/send-to-customer`/);
 });
@@ -588,6 +644,16 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     });
     assert.equal(processed.status, 200);
 
+    const ssot = await fetch(`${baseUrl}/api/debug/offer-runs/${inboundBody.offer_run_id}/ssot-check`, {
+      headers: { Cookie: cookie }
+    });
+    assert.equal(ssot.status, 200);
+    const ssotBody = await ssot.json();
+    assert.equal(ssotBody.ok, true);
+    assert.equal(ssotBody.review.tableCount, ssotBody.preview.tableCount);
+    assert.equal(ssotBody.preview.tableCount, ssotBody.mail.tableCount);
+    assert.equal(ssotBody.inventoryAlternativeRules.sendFlowRule.includes('must not re-enable'), true);
+
     const missingTo = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/send-to-customer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
@@ -607,12 +673,30 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     const editableOffer = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/editable-offer`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({ editable_offer: { inventory_alternative: { enabled: false } } })
+      body: JSON.stringify({
+        editable_offer: {
+          to: 'persisted@example.at',
+          subject: 'Persistiertes Angebot',
+          intro: 'Persistiertes Intro',
+          rows: [{ type: 'item', product: 'Persistierter Hochlader', uvpNet: '3000,00', discount: '300,00', offerNet: '2700,00' }],
+          extra_tables: [],
+          notes: 'Persistierter Hinweis',
+          signature: 'Persistierte Signatur',
+          inventory_alternative: { enabled: false }
+        }
+      })
     });
     assert.equal(editableOffer.status, 200);
     const editableOfferBody = await editableOffer.json();
     assert.equal(editableOfferBody.ok, true);
     assert.equal(editableOfferBody.editable_offer.inventory_alternative.enabled, false);
+    assert.equal(editableOfferBody.editable_offer.to, 'persisted@example.at');
+    assert.equal(editableOfferBody.editable_offer.subject, 'Persistiertes Angebot');
+    assert.equal(editableOfferBody.editable_offer.intro, 'Persistiertes Intro');
+    assert.equal(editableOfferBody.editable_offer.rows[0].product, 'Persistierter Hochlader');
+    assert.deepEqual(editableOfferBody.editable_offer.extra_tables, []);
+    assert.equal(editableOfferBody.editable_offer.notes, 'Persistierter Hinweis');
+    assert.equal(editableOfferBody.editable_offer.signature, 'Persistierte Signatur');
 
     const editedHtml = [
       '<div style="font-family:Arial;font-size:14px;">',
@@ -630,7 +714,17 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
       body: JSON.stringify({
         to: 'edited@example.at',
         subject: 'Bearbeitetes Eduard Angebot',
-        html: editedHtml
+        html: editedHtml,
+        editable_offer: {
+          to: 'edited@example.at',
+          subject: 'Bearbeitetes Eduard Angebot',
+          intro: 'Sehr geehrte Frau Kunde, hier ist das bearbeitete Angebot.',
+          rows: [{ type: 'item', product: 'Bearbeiteter Hochlader', uvpNet: '3000,00', discount: '300,00', offerNet: '2700,00' }],
+          extra_tables: [],
+          notes: 'Hinweis nach Bearbeitung.',
+          signature: 'Beste Grüße\nLukas Mitter',
+          inventory_alternative: { enabled: false }
+        }
       })
     });
     assert.equal(send.status, 200);
@@ -651,6 +745,9 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     const detailBody = await detail.json();
     assert.equal(detailBody.status, 'sent_to_customer');
     assert.equal(detailBody.summary.editable_offer.inventory_alternative.enabled, false);
+    assert.equal(detailBody.summary.editable_offer.to, 'edited@example.at');
+    assert.equal(detailBody.summary.editable_offer.subject, 'Bearbeitetes Eduard Angebot');
+    assert.match(detailBody.summary.editable_offer.rows[0].product, /Bearbeiteter Hochlader/);
     assert.equal(detailBody.events.some((event) => event.event_type === 'sent_to_customer'), true);
     assert.equal(detailBody.events.some((event) => event.event_type === 'editable_offer_updated'), true);
   } finally {

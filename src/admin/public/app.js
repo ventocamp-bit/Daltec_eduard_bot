@@ -54,6 +54,7 @@ const panelViews = Array.from(document.querySelectorAll('.panel-view'));
 const contentShell = document.querySelector('.content-shell');
 let currentSettings = {};
 let activeDraftPreviewForm = null;
+let editableOfferSaveTimer;
 
 document.querySelector('#save').addEventListener('click', save);
 document.querySelector('#logout').addEventListener('click', logout);
@@ -766,9 +767,7 @@ async function renderRunDetail(runId, options = {}) {
       form.addEventListener('change', (event) => {
         recalculateDraftTotals(form);
         syncDraftPreview(form);
-        if (event.target.matches('[data-inventory-alternative-toggle]')) {
-          saveEditableOfferState(run.id, form).catch((error) => showDraftError(form, error.message));
-        }
+        saveEditableOfferState(run.id, form).catch((error) => showDraftError(form, error.message));
       });
       form.addEventListener('click', (event) => handleDraftTableClick(event, form));
     }
@@ -790,7 +789,7 @@ function runDetailHtml(run, options = {}) {
   const disabled = readOnly ? ' disabled' : '';
   const sendDisabled = testMode ? ' disabled' : '';
   return `
-    <form class="draft-review" data-draft-review-form>
+    <form class="draft-review" data-draft-review-form data-run-id="${escapeHtml(run.id)}">
       <div class="draft-review-head">
         <div>
           <p class="eyebrow">${readOnly ? 'Verlauf' : 'Draft Review'}</p>
@@ -805,18 +804,26 @@ function runDetailHtml(run, options = {}) {
 
       ${customerEmailCopyBannerHtml(draft.to)}
 
-      <div class="inline two">
-        <label>An <input data-draft-field="to" type="email" value="${escapeHtml(draft.to)}" required${disabled}></label>
-        <label>Betreff <input data-draft-field="subject" type="text" value="${escapeHtml(draft.subject)}" required${disabled}></label>
+      <div class="draft-ssot-note">
+        <strong>Mail-Vorschau f&uuml;r H&auml;ndler anzeigen</strong>
+        <span>Die Vorschau rechts wird aus genau denselben Feldern gebaut, die beim Senden verschickt werden.</span>
+        <button type="button" class="secondary" data-show-mail-preview${readOnly ? ' hidden' : ''}>Vorschau aktualisieren</button>
       </div>
 
+      <div class="inline two">
+        <label>An <span class="field-badge editable">Dauerhaft anpassbar</span><input data-draft-field="to" type="email" value="${escapeHtml(draft.to)}" required${disabled}></label>
+        <label>Betreff <span class="field-badge editable">Dauerhaft anpassbar</span><input data-draft-field="subject" type="text" value="${escapeHtml(draft.subject)}" required${disabled}></label>
+      </div>
+
+      ${catalogReadOnlySummaryHtml(draft.catalog)}
+
       <section class="draft-section">
-        <strong>Anrede & Intro</strong>
+        <strong>Anrede & Intro <span class="field-badge editable">Dauerhaft anpassbar</span></strong>
         <textarea data-draft-field="intro" rows="5"${disabled}>${escapeHtml(draft.intro)}</textarea>
       </section>
 
       <section class="draft-section">
-        <strong>Preistabelle</strong>
+        <strong>Preistabelle <span class="field-badge editable">Dauerhaft anpassbar</span></strong>
         <table class="editable-price-table" data-draft-table>
           <thead>
             <tr>
@@ -836,12 +843,12 @@ function runDetailHtml(run, options = {}) {
       <script type="application/json" data-draft-extra-tables>${jsonScriptContent(draft.extraTables)}</script>
 
       <section class="draft-section">
-        <strong>Hinweise (optional)</strong>
+        <strong>Hinweise (optional) <span class="field-badge editable">Dauerhaft anpassbar</span></strong>
         <textarea data-draft-field="notes" rows="4"${disabled}>${escapeHtml(draft.notes)}</textarea>
       </section>
 
       <section class="draft-section">
-        <strong>Signatur</strong>
+        <strong>Signatur <span class="field-badge editable">Dauerhaft anpassbar</span></strong>
         <textarea data-draft-field="signature" rows="5"${disabled}>${escapeHtml(draft.signature)}</textarea>
       </section>
 
@@ -890,24 +897,56 @@ function draftPriceRowHtml(row, options = {}) {
 function draftReviewState(run) {
   const customer = run.customer_json || {};
   const pricing = run.pricing_json || {};
+  const saved = run.summary?.editable_offer || {};
   const customerName = run.summary?.customerName || [customer.first_name, customer.last_name].filter(Boolean).join(' ');
-  const to = run.draft?.customer_email || run.summary?.customerEmail || customer.email || '';
-  const subject = run.draft?.subject || run.draft_subject || `Ihr Eduard Angebot${customerName ? ` - ${customerName}` : ''}`;
   const paragraphs = draftParagraphs(run.draft?.html_body || run.draft_html || '');
   const extraTables = draftExtraTables(run);
-  const inventoryAlternativeEnabled = run.summary?.editable_offer?.inventory_alternative?.enabled !== false;
+  const defaultRows = draftRows(run);
+  const rows = Array.isArray(saved.rows) && saved.rows.length ? saved.rows : defaultRows;
+  const inventoryAlternativeEnabled = saved.inventory_alternative?.enabled !== false;
   return {
     customerName,
-    to,
-    subject,
-    intro: paragraphs[0] || defaultIntro(customerName),
-    rows: draftRows(run),
+    to: saved.to || run.draft?.customer_email || run.summary?.customerEmail || customer.email || '',
+    subject: saved.subject || run.draft?.subject || run.draft_subject || `Ihr Eduard Angebot${customerName ? ` - ${customerName}` : ''}`,
+    intro: saved.intro ?? (paragraphs[0] || defaultIntro(customerName)),
+    rows,
     extraTables,
     inventoryAlternativeAvailable: extraTables.length > 0,
     inventoryAlternativeEnabled,
-    notes: draftNotesFromHtml(draftOriginalHtml(run)),
-    signature: paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})
+    notes: saved.notes ?? draftNotesFromHtml(draftOriginalHtml(run)),
+    signature: saved.signature ?? (paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})),
+    catalog: catalogReadOnlySummary(run)
   };
+}
+
+function catalogReadOnlySummary(run) {
+  const pricing = run.pricing_json || {};
+  const first = Array.isArray(pricing.positionen) ? pricing.positionen[0] : null;
+  const match = run.match_json || {};
+  return {
+    product: first?.produkt_name || run.line_items_json?.[0]?.produkt_name_original || '',
+    family: first?.product_family || '',
+    sku: first?.produktcode || run.line_items_json?.[0]?.artikelnummer || '',
+    inventory: match.top_lager_name || match.topInventoryName || ''
+  };
+}
+
+function catalogReadOnlySummaryHtml(catalog = {}) {
+  const items = [
+    ['Haupt-Produkt', catalog.product],
+    ['Produktfamilie', catalog.family],
+    ['Artikelnummer', catalog.sku],
+    ['Lager-Vorschlag', catalog.inventory]
+  ].filter((item) => item[1]);
+  if (!items.length) return '';
+  return `
+    <section class="draft-readonly-source" data-readonly-source="catalog">
+      <strong>Grunddaten aus Product Catalog <span class="field-badge readonly">Nur lesend</span></strong>
+      <dl>
+        ${items.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}
+      </dl>
+    </section>
+  `;
 }
 
 function draftOriginalHtml(run) {
@@ -1133,28 +1172,31 @@ async function rejectDraft(runId) {
 
 function buildEditedDraftPayload(form) {
   recalculateDraftTotals(form);
-  const to = form.querySelector('[data-draft-field="to"]').value.trim();
-  const subject = form.querySelector('[data-draft-field="subject"]').value.trim();
-  const html = buildEditedDraftHtml({
-    intro: form.querySelector('[data-draft-field="intro"]').value,
+  const editable_offer = editableOfferPayloadFromForm(form);
+  const html = buildEditedDraftHtml(mailInputFromEditableOffer(editable_offer));
+  return { to: editable_offer.to, subject: editable_offer.subject, html, editable_offer };
+}
+
+function mailInputFromEditableOffer(editableOffer) {
+  return {
+    intro: editableOffer.intro,
     tables: [
       {
-        title: draftExtraTablesFromForm(form).length ? 'WUNSCH-KONFIGURATION' : '',
-        rows: Array.from(form.querySelectorAll('[data-price-row]')).map((row) => ({
-          type: row.dataset.rowType || '',
-          product: row.querySelector('[data-price-field="product"]').value,
-          uvp: draftMailPriceValue(row, 'uvp'),
-          discount: draftMailPriceValue(row, 'discount'),
-          offer: draftMailPriceValue(row, 'offer')
+        title: editableOffer.extra_tables.length ? 'WUNSCH-KONFIGURATION' : '',
+        rows: editableOffer.rows.map((row) => ({
+          type: row.type || '',
+          product: row.product,
+          uvp: formatMoney(parseMoney(row.uvpNet) || 0),
+          discount: formatMoney(parseMoney(row.discount) || 0),
+          offer: formatMoney(parseMoney(row.offerNet) || 0)
         }))
       },
-      ...draftExtraTablesFromForm(form)
+      ...editableOffer.extra_tables
     ],
-    notes: form.querySelector('[data-draft-field="notes"]').value,
-    signature: form.querySelector('[data-draft-field="signature"]').value,
+    notes: editableOffer.notes,
+    signature: editableOffer.signature,
     settings: currentSettings
-  });
-  return { to, subject, html, editable_offer: editableOfferPayloadFromForm(form) };
+  };
 }
 
 function syncDraftPreview(form) {
@@ -1182,10 +1224,27 @@ function jsonScriptContent(value) {
 function editableOfferPayloadFromForm(form) {
   const toggle = form.querySelector('[data-inventory-alternative-toggle]');
   return {
+    to: form.querySelector('[data-draft-field="to"]').value.trim(),
+    subject: form.querySelector('[data-draft-field="subject"]').value.trim(),
+    intro: form.querySelector('[data-draft-field="intro"]').value,
+    rows: editableRowsFromForm(form),
+    extra_tables: draftExtraTablesFromForm(form),
+    notes: form.querySelector('[data-draft-field="notes"]').value,
+    signature: form.querySelector('[data-draft-field="signature"]').value,
     inventory_alternative: {
       enabled: toggle ? toggle.checked : true
     }
   };
+}
+
+function editableRowsFromForm(form) {
+  return Array.from(form.querySelectorAll('[data-price-row]')).map((row) => ({
+    type: row.dataset.rowType || '',
+    product: row.querySelector('[data-price-field="product"]').value,
+    uvpNet: row.querySelector('[data-price-field="uvpNet"]').value,
+    discount: row.querySelector('[data-price-field="discount"]').value,
+    offerNet: row.querySelector('[data-price-field="offerNet"]').value
+  }));
 }
 
 async function saveEditableOfferState(runId, form) {
@@ -1226,6 +1285,12 @@ function handleDraftTableClick(event, form) {
     addDraftItemRow(form);
     recalculateDraftTotals(form);
     syncDraftPreview(form);
+  }
+
+  if (event.target.closest('[data-show-mail-preview]')) {
+    recalculateDraftTotals(form);
+    syncDraftPreview(form);
+    previewFrame.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
@@ -1282,6 +1347,16 @@ function handleDraftReviewInput(event, form) {
   }
   recalculateDraftTotals(form);
   syncDraftPreview(form);
+  scheduleEditableOfferSave(form);
+}
+
+function scheduleEditableOfferSave(form) {
+  clearTimeout(editableOfferSaveTimer);
+  const runId = form.dataset.runId;
+  if (!runId) return;
+  editableOfferSaveTimer = setTimeout(() => {
+    saveEditableOfferState(runId, form).catch((error) => showDraftError(form, error.message));
+  }, 450);
 }
 
 function sanitizeMoneyInput(input) {
