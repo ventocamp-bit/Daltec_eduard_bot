@@ -12,6 +12,8 @@ const offerListEl = document.querySelector('#offer-list');
 const offerCountEl = document.querySelector('#offer-count');
 const runListEl = document.querySelector('#run-list');
 const runCountEl = document.querySelector('#run-count');
+const inboundStatusListEl = document.querySelector('#inbound-status-list');
+const inboundStatusCountEl = document.querySelector('#inbound-status-count');
 const inventoryImportListEl = document.querySelector('#inventory-import-list');
 const inventoryImportCountEl = document.querySelector('#inventory-import-count');
 const runDetailEl = document.querySelector('#run-detail');
@@ -43,6 +45,7 @@ const mailStatusEl = document.querySelector('#mail-status');
 const gmailConnectEl = document.querySelector('#gmail-connect');
 const outlookConnectEl = document.querySelector('#outlook-connect');
 const localLoginEl = document.querySelector('#local-login');
+const manualIngestButton = document.querySelector('#btn-manual-ingest');
 const productGroupsEl = document.querySelector('#product-groups');
 const addProductGroupButton = document.querySelector('#add-product-group');
 const priceRulesEl = document.querySelector('#price-rules');
@@ -62,9 +65,11 @@ document.querySelector('#lager-upload').addEventListener('change', () => uploadC
 copyQueryButton.addEventListener('click', copyGmailQuery);
 gmailConnectEl.addEventListener('click', preventDisabledLink);
 outlookConnectEl.addEventListener('click', preventDisabledLink);
+manualIngestButton.addEventListener('click', manualIngest);
 addProductGroupButton.addEventListener('click', addProductGroup);
 addPriceRuleButton.addEventListener('click', addPriceRule);
 runListEl.addEventListener('click', openRunFromList);
+inboundStatusListEl.addEventListener('click', openRunFromList);
 monitoringAlertsEl.addEventListener('click', openRunFromList);
 saasBlockersEl.addEventListener('click', openRunFromList);
 reviewListEl.addEventListener('click', handleReviewQueueClick);
@@ -174,6 +179,7 @@ async function load() {
   await refreshMailStatus();
   await refreshDataStatus();
   await refreshInventoryImports();
+  await refreshInboundStatus();
   await refreshOffers();
   await refreshRuns();
   await preview();
@@ -706,6 +712,16 @@ function preventDisabledLink(event) {
   }
 }
 
+async function manualIngest() {
+  const rawText = window.prompt('Bitte den rohen Mail-Text oder die Anfrage hier hineinkopieren:');
+  if (!rawText || !rawText.trim()) return;
+  await request('/api/debug/manual-ingest', {
+    method: 'POST',
+    body: JSON.stringify({ rawText })
+  });
+  window.location.reload();
+}
+
 async function copyGmailQuery() {
   await navigator.clipboard.writeText(gmailQueryEl.value);
   copyQueryButton.textContent = 'Kopiert';
@@ -746,6 +762,34 @@ async function refreshRuns() {
     : '<div class="status">Noch keine Verarbeitungen</div>';
 }
 
+async function refreshInboundStatus() {
+  const snapshot = await request('/api/inbound-status?limit=25');
+  inboundStatusCountEl.textContent = String(snapshot.items.length);
+  inboundStatusListEl.innerHTML = snapshot.items.length
+    ? snapshot.items.slice(0, 8).map(inboundStatusItemHtml).join('')
+    : '<div class="status">Noch keine eingegangenen Mails</div>';
+}
+
+function inboundStatusItemHtml(item) {
+  const lastEvent = item.lastEvent?.message || item.lastEvent?.event_type || '';
+  const reason = item.error_message || lastEvent || item.subject || item.runId;
+  const eventTrail = (item.events || [])
+    .map((event) => event.event_type)
+    .filter(Boolean)
+    .join(' -> ');
+  return `
+    <button type="button" class="offer-item run-item inbound-status-item" data-run-id="${escapeHtml(item.runId)}">
+      <div class="offer-main">
+        <strong>${escapeHtml(item.subject || 'Eingang ohne Betreff')}</strong>
+        <small>${escapeHtml([item.provider, item.from, formatDateTime(item.receivedAt)].filter(Boolean).join(' | '))}</small>
+        <small>${escapeHtml(reason)}</small>
+        ${eventTrail ? `<small>${escapeHtml(eventTrail)}</small>` : ''}
+      </div>
+      <span class="run-status ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span>
+    </button>
+  `;
+}
+
 async function openRunFromList(event) {
   const button = event.target.closest('[data-run-id]');
   if (!button) return;
@@ -767,7 +811,7 @@ async function renderRunDetail(runId, options = {}) {
       form.addEventListener('change', (event) => {
         recalculateDraftTotals(form);
         syncDraftPreview(form);
-        saveEditableOfferState(run.id, form).catch((error) => showDraftError(form, error.message));
+        saveEditableOfferState(run.id, form).catch((error) => handleDraftSaveError(form, error));
       });
       form.addEventListener('click', (event) => handleDraftTableClick(event, form));
     }
@@ -1222,6 +1266,10 @@ async function sendEditedDraft(event, runId) {
     await refreshMonitoring();
     await refreshSaasReadiness();
   } catch (error) {
+    if (isConflictError(error)) {
+      showDraftConflict(form);
+      return;
+    }
     button.disabled = false;
     button.textContent = '✓ Mail senden';
     message.hidden = false;
@@ -1358,6 +1406,44 @@ function showDraftError(form, message) {
   element.textContent = message;
 }
 
+function handleDraftSaveError(form, error) {
+  if (isConflictError(error)) {
+    showDraftConflict(form);
+    return;
+  }
+  showDraftError(form, error.message);
+}
+
+function isConflictError(error) {
+  return Number(error?.status) === 409;
+}
+
+function showDraftConflict(form) {
+  if (!form) return;
+  if (editableOfferSaveTimer) {
+    clearTimeout(editableOfferSaveTimer);
+    editableOfferSaveTimer = null;
+  }
+  form.dataset.editableOfferConflict = 'true';
+  const message = form.querySelector('[data-draft-conflict-message]') || document.createElement('div');
+  message.dataset.draftConflictMessage = 'true';
+  message.hidden = false;
+  message.className = 'draft-message error';
+  message.innerHTML = `
+    <strong>ACHTUNG: Dieses Angebot wurde zwischenzeitlich von einem anderen Verkäufer aktualisiert oder bereits versendet!</strong>
+    <button type="button" data-reload-current-run>Aktuellen Serverstand laden</button>
+  `;
+  if (!message.parentElement) {
+    form.insertBefore(message, form.firstElementChild);
+  }
+  form.querySelectorAll('input, textarea, select, button').forEach((element) => {
+    if (!element.matches('[data-reload-current-run]')) element.disabled = true;
+  });
+  const reloadButton = message.querySelector('[data-reload-current-run]');
+  reloadButton.disabled = false;
+  reloadButton.addEventListener('click', () => window.location.reload(), { once: true });
+}
+
 function handleDraftTableClick(event, form) {
   const emailCopyButton = event.target.closest('[data-copy-customer-email]');
   if (emailCopyButton) {
@@ -1450,7 +1536,7 @@ function scheduleEditableOfferSave(form) {
   const runId = form.dataset.runId;
   if (!runId) return;
   editableOfferSaveTimer = setTimeout(() => {
-    saveEditableOfferState(runId, form).catch((error) => showDraftError(form, error.message));
+    saveEditableOfferState(runId, form).catch((error) => handleDraftSaveError(form, error));
   }, 450);
 }
 
@@ -1600,7 +1686,10 @@ async function request(url, options = {}) {
     if (response.status === 401 && !url.includes('/api/auth/login') && !url.includes('/api/auth/me')) {
       showLogin();
     }
-    throw new Error(data.error || response.statusText);
+    const error = new Error(data.error || response.statusText);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
   return data;
 }

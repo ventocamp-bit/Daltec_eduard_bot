@@ -601,6 +601,48 @@ export function createAdminApp(options = {}) {
   }
   });
 
+  app.get('/api/inbound-status', async (req, res, next) => {
+  try {
+    const limit = clampNumber(req.query.limit, 1, 100, 25);
+    res.json(await buildInboundStatusSnapshot(req.tenantContext, limit));
+  } catch (error) {
+    next(error);
+  }
+  });
+
+  app.post('/api/debug/manual-ingest', async (req, res, next) => {
+  try {
+    if (process.env.NODE_ENV === 'production' || req.hostname !== 'localhost') {
+      res.status(403).json({ ok: false, error: 'Forbidden: Local debug only' });
+      return;
+    }
+    const rawText = String(req.body?.rawText || '').trim();
+    if (!rawText) {
+      res.status(400).json({ ok: false, error: 'Missing rawText' });
+      return;
+    }
+    const date = new Date().toISOString();
+    const dummyMessage = {
+      text: rawText,
+      subject: req.body?.subject || 'Manuelle Anfrage',
+      from: req.body?.from || 'interne-injektion@daltec.at',
+      to: 'office@daltec.at',
+      date,
+      received_at: date
+    };
+    const result = await ingestInboundMessage(dummyMessage, req.tenantContext);
+    res.status(200).json({
+      ok: true,
+      duplicate: result.duplicate,
+      message_id: result.message?.id || null,
+      offer_run_id: result.run?.id || null,
+      status: result.run?.status || 'received'
+    });
+  } catch (error) {
+    next(error);
+  }
+  });
+
   app.get('/api/review-queue', async (req, res, next) => {
   try {
     res.json(await buildSharedReviewQueue(req.tenantContext));
@@ -1168,6 +1210,54 @@ function hasReviewRisk(run) {
     event.event_type === 'inventory_stale' ||
     event.level === 'warning'
   );
+}
+
+async function buildInboundStatusSnapshot(context, limit = 25) {
+  const runs = await listOfferRuns(limit, context);
+  const details = await Promise.all(runs.map((run) => loadOfferRun(run.id, context)));
+  return {
+    generatedAt: new Date().toISOString(),
+    limit,
+    items: details.filter(Boolean).map(inboundStatusItem)
+  };
+}
+
+function inboundStatusItem(run) {
+  const inbound = run.inbound_message || {};
+  const events = (run.events || []).map(inboundStatusEvent);
+  const lastEvent = events.at(-1) || null;
+  return {
+    runId: run.id,
+    inboundMessageId: run.inbound_message_id || inbound.id || null,
+    receivedAt: inbound.received_at || run.created_at || null,
+    createdAt: run.created_at || null,
+    provider: inbound.provider || null,
+    providerMessageId: inbound.provider_message_id || null,
+    subject: inbound.subject || run.draft_subject || '',
+    from: inbound.from_email || '',
+    status: run.status,
+    error_code: run.error_code || null,
+    error_message: run.error_message || null,
+    lastEvent,
+    events: compactInboundEvents(events)
+  };
+}
+
+function inboundStatusEvent(event = {}) {
+  return {
+    event_type: event.event_type || '',
+    level: event.level || 'info',
+    message: event.message || '',
+    created_at: event.created_at || null
+  };
+}
+
+function compactInboundEvents(events) {
+  const firstReceived = events.find((event) => event.event_type === 'email_received');
+  const latest = events.slice(-5);
+  return [firstReceived, ...latest]
+    .filter(Boolean)
+    .filter((event, index, list) => list.findIndex((item) => item === event) === index);
 }
 
 function isMonitoringNoise(run, config, settings) {

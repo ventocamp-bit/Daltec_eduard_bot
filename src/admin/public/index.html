@@ -54,6 +54,7 @@
             <p>Review, Texte, Preise, Mail und Lager in einem Arbeitsbereich.</p>
           </div>
           <div class="header-actions">
+            <button id="btn-manual-ingest" type="button">Manueller Ingest</button>
             <button id="save">Speichern</button>
           </div>
         </header>
@@ -251,6 +252,14 @@
           </section>
 
           <section class="history-grid">
+            <section class="stack-panel">
+              <div class="panel-head compact">
+                <strong>Letzte Eing&auml;nge</strong>
+                <span id="inbound-status-count">0</span>
+              </div>
+              <div id="inbound-status-list" class="offer-list"></div>
+            </section>
+
             <section class="stack-panel">
               <div class="panel-head compact">
                 <strong>Letzte Angebote</strong>
