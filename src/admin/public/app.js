@@ -615,7 +615,7 @@ function reviewQueueItemHtml(item) {
 async function handleReviewQueueClick(event) {
   const feedbackButton = event.target.closest('[data-quick-feedback]');
   if (feedbackButton) {
-    await submitOwnerFeedback(feedbackButton.dataset.runId, feedbackButton.dataset.quickFeedback, { renderDetail: false });
+    await submitOwnerFeedback(feedbackButton.dataset.runId, feedbackButton.dataset.quickFeedback);
     return;
   }
   const openButton = event.target.closest('[data-run-id]');
