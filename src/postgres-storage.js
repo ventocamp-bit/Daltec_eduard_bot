@@ -15,6 +15,7 @@ const JSONB_FIELDS = new Set([
 ]);
 
 const ACTIVE_RUN_STATUSES = new Set(['received', 'parsing', 'parsed', 'matching', 'pricing', 'drafting', 'completed', 'needs_review']);
+const SEND_LOCKED_STATUSES = ['sent_to_customer', 'rejected', 'sending_to_customer'];
 
 let pool;
 let schemaReady;
@@ -395,6 +396,51 @@ export async function updateOfferRun(runId, patch, context = {}) {
     [dealerId, runId, ...values]
   );
   return result.rows[0] ? normalizeRun(result.rows[0]) : null;
+}
+
+export async function claimOfferRunForCustomerSend(runId, payload = {}, context = {}) {
+  await ensurePostgresSchema();
+  const dealerId = tenantIdFromContext(context);
+  const current = await getPool().query(
+    'SELECT summary FROM offer_runs WHERE dealer_id = $1 AND id = $2',
+    [dealerId, runId]
+  );
+  if (!current.rows[0]) return null;
+  const sendStartedAt = new Date().toISOString();
+  const summary = {
+    ...(current.rows[0].summary || {}),
+    customerEmail: payload.to || current.rows[0].summary?.customerEmail || '',
+    send_started_at: sendStartedAt,
+    editable_offer: payload.editable_offer || current.rows[0].summary?.editable_offer || {}
+  };
+  const result = await getPool().query(
+    `UPDATE offer_runs
+     SET status = $3,
+         draft_subject = $4,
+         draft_html = $5,
+         summary = $6,
+         updated_at = $7
+     WHERE dealer_id = $1
+       AND id = $2
+       AND status <> ALL($8)
+     RETURNING *`,
+    [
+      dealerId,
+      runId,
+      'sending_to_customer',
+      payload.subject || '',
+      payload.html || '',
+      jsonb(summary),
+      sendStartedAt,
+      SEND_LOCKED_STATUSES
+    ]
+  );
+  if (!result.rows[0]) {
+    const error = new Error('run_not_sendable');
+    error.statusCode = 409;
+    throw error;
+  }
+  return normalizeRun(result.rows[0]);
 }
 
 export async function appendOfferRunEvent(runId, event, context = {}) {

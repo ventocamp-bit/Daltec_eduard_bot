@@ -9,6 +9,8 @@ const DATA_DIR = path.resolve('data');
 const TENANT_PATH = path.join(DATA_DIR, 'tenant.json');
 const OFFERS_PATH = path.join(DATA_DIR, 'offers.jsonl');
 const ACTIVE_RUN_STATUSES = new Set(['received', 'parsing', 'parsed', 'matching', 'pricing', 'drafting', 'completed', 'needs_review']);
+const SEND_LOCKED_STATUSES = new Set(['sent_to_customer', 'rejected', 'sending_to_customer']);
+const runLocks = new Map();
 
 function usePostgresStorage() {
   return Boolean(process.env.DATABASE_URL);
@@ -206,6 +208,55 @@ export async function updateOfferRun(runId, patch, context = {}) {
   runs[index] = { ...runs[index], ...patch, updated_at: new Date().toISOString() };
   await writeJsonl(runsPath, runs);
   return runs[index];
+}
+
+export async function claimOfferRunForCustomerSend(runId, payload = {}, context = {}) {
+  if (usePostgresStorage()) return postgresStorage.claimOfferRunForCustomerSend(runId, payload, context);
+  const paths = getStoragePaths(context);
+  return withRunLock(`${paths.tenantId}:${runId}`, async () => {
+    const runsPath = path.join(paths.baseDir, 'offer_runs.jsonl');
+    const runs = await readJsonl(runsPath);
+    const index = runs.findIndex((run) => run.id === runId);
+    if (index === -1) return null;
+    if (SEND_LOCKED_STATUSES.has(runs[index].status)) {
+      const error = new Error('run_not_sendable');
+      error.statusCode = 409;
+      throw error;
+    }
+    const sendStartedAt = new Date().toISOString();
+    runs[index] = {
+      ...runs[index],
+      status: 'sending_to_customer',
+      draft_subject: payload.subject || runs[index].draft_subject || '',
+      draft_html: payload.html || runs[index].draft_html || '',
+      summary: {
+        ...(runs[index].summary || {}),
+        customerEmail: payload.to || runs[index].summary?.customerEmail || '',
+        send_started_at: sendStartedAt,
+        editable_offer: payload.editable_offer || runs[index].summary?.editable_offer || {}
+      },
+      updated_at: sendStartedAt
+    };
+    await writeJsonl(runsPath, runs);
+    return runs[index];
+  });
+}
+
+async function withRunLock(key, fn) {
+  const previous = runLocks.get(key) || Promise.resolve();
+  let release;
+  const current = new Promise((resolve) => {
+    release = resolve;
+  });
+  const chained = previous.then(() => current, () => current);
+  runLocks.set(key, chained);
+  await previous.catch(() => null);
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (runLocks.get(key) === chained) runLocks.delete(key);
+  }
 }
 
 export async function appendOfferRunEvent(runId, event, context = {}) {

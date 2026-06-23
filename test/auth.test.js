@@ -636,7 +636,10 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     mailRuntimeFactory: async () => ({
       provider: 'test',
       client: {},
-      sendHtmlMail: async (client, message) => sentMails.push(message)
+      sendHtmlMail: async (client, message) => {
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        sentMails.push(message);
+      }
     })
   });
   const server = http.createServer(app);
@@ -772,26 +775,53 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
       '</table><p>Hinweis nach Bearbeitung.</p><p>Beste Grüße<br>Lukas Mitter</p></div>'
     ].join('');
 
-    const send = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/send-to-customer`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Cookie: cookie },
-      body: JSON.stringify({
+    const sendPayload = {
+      to: 'edited@example.at',
+      subject: 'Bearbeitetes Eduard Angebot',
+      html: '<p>STALE BODY HTML MUST NOT BE SENT</p>',
+      editable_offer: {
         to: 'edited@example.at',
         subject: 'Bearbeitetes Eduard Angebot',
-        html: '<p>STALE BODY HTML MUST NOT BE SENT</p>',
-        version: 1,
+        intro: 'Sehr geehrte Frau Kunde, hier ist das bearbeitete Angebot.',
+        rows: [{ type: 'item', product: 'Bearbeiteter Hochlader', uvpNet: '3000,00', discount: '300,00', offerNet: '2700,00' }],
+        extra_tables: [],
+        notes: 'Hinweis nach Bearbeitung.',
+        signature: 'Beste Gr\u00fc\u00dfe\nLukas Mitter',
+        inventory_alternative: { enabled: false }
+      }
+    };
+
+    const [firstSend, secondSend] = await Promise.all([
+      fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/send-to-customer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify(sendPayload)
+      }),
+      fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/send-to-customer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify(sendPayload)
+      })
+    ]);
+    const sendResponses = [firstSend, secondSend].sort((left, right) => left.status - right.status);
+    assert.equal(sendResponses[0].status, 200);
+    assert.equal(sendResponses[1].status, 409);
+    const send = sendResponses[0];
+    assert.deepEqual(await sendResponses[1].json(), { ok: false, error: 'run_not_sendable' });
+
+    const patchAfterSend = await fetch(`${baseUrl}/api/offer-runs/${inboundBody.offer_run_id}/editable-offer`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        version: successfulPatchBody.version,
         editable_offer: {
-          to: 'edited@example.at',
-          subject: 'Bearbeitetes Eduard Angebot',
-          intro: 'Sehr geehrte Frau Kunde, hier ist das bearbeitete Angebot.',
-          rows: [{ type: 'item', product: 'Bearbeiteter Hochlader', uvpNet: '3000,00', discount: '300,00', offerNet: '2700,00' }],
-          extra_tables: [],
-          notes: 'Hinweis nach Bearbeitung.',
-          signature: 'Beste Grüße\nLukas Mitter',
-          inventory_alternative: { enabled: false }
+          ...sendPayload.editable_offer,
+          intro: 'Darf nach Versand nicht mehr speichern.'
         }
       })
     });
+    assert.equal(patchAfterSend.status, 409);
+    assert.deepEqual(await patchAfterSend.json(), { ok: false, error: 'run_finalized' });
     assert.equal(send.status, 200);
     const sendBody = await send.json();
     assert.equal(sendBody.ok, true);
@@ -810,12 +840,43 @@ test('review send-to-customer endpoint validates sends edited draft and marks ru
     });
     const detailBody = await detail.json();
     assert.equal(detailBody.status, 'sent_to_customer');
+    assert.equal(detailBody.draft_html, sentMails[0].html);
     assert.equal(detailBody.summary.editable_offer.inventory_alternative.enabled, false);
     assert.equal(detailBody.summary.editable_offer.to, 'edited@example.at');
     assert.equal(detailBody.summary.editable_offer.subject, 'Bearbeitetes Eduard Angebot');
     assert.match(detailBody.summary.editable_offer.rows[0].product, /Bearbeiteter Hochlader/);
     assert.equal(detailBody.events.some((event) => event.event_type === 'sent_to_customer'), true);
     assert.equal(detailBody.events.some((event) => event.event_type === 'editable_offer_updated'), true);
+
+    const rejectedInbound = await fetch(`${baseUrl}/api/inbound/email`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        ...inboundPayload,
+        provider_message_id: `send-flow-rejected-${Date.now()}`,
+        from_email: 'kunde-rejected@example.at'
+      })
+    });
+    assert.equal(rejectedInbound.status, 201);
+    const rejectedInboundBody = await rejectedInbound.json();
+    const rejectedProcessed = await fetch(`${baseUrl}/api/offer-runs/${rejectedInboundBody.offer_run_id}/process`, {
+      method: 'POST',
+      headers: { Cookie: cookie }
+    });
+    assert.equal(rejectedProcessed.status, 200);
+    const rejectedFeedback = await fetch(`${baseUrl}/api/offer-runs/${rejectedInboundBody.offer_run_id}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ rating: 'rejected' })
+    });
+    assert.equal(rejectedFeedback.status, 200);
+    const patchAfterRejected = await fetch(`${baseUrl}/api/offer-runs/${rejectedInboundBody.offer_run_id}/editable-offer`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ editable_offer: sendPayload.editable_offer })
+    });
+    assert.equal(patchAfterRejected.status, 409);
+    assert.deepEqual(await patchAfterRejected.json(), { ok: false, error: 'run_finalized' });
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

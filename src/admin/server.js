@@ -41,6 +41,7 @@ import {
 } from '../review-digest.js';
 import {
   appendOfferRunEvent,
+  claimOfferRunForCustomerSend,
   ingestInboundMessage,
   listOfferRecords,
   listOfferRuns,
@@ -724,6 +725,7 @@ export function createAdminApp(options = {}) {
   });
 
   app.post('/api/offer-runs/:id/send-to-customer', async (req, res) => {
+  let claimedRun = null;
   try {
     const run = await loadOfferRun(req.params.id, req.tenantContext);
     if (!run) {
@@ -733,6 +735,16 @@ export function createAdminApp(options = {}) {
     const draft = normalizeCustomerSendPayload(req.body || {});
     const rendered = renderEditableOfferForRun(run, draft.editable_offer);
     const finalHtml = rendered.html;
+    claimedRun = await claimOfferRunForCustomerSend(run.id, {
+      to: draft.to,
+      subject: draft.subject,
+      html: finalHtml,
+      editable_offer: rendered.normalized_editable_offer
+    }, req.tenantContext);
+    if (!claimedRun) {
+      res.status(404).json({ ok: false, error: 'run_not_found' });
+      return;
+    }
     const config = loadConfig();
     const runtime = await mailRuntimeFactory(config, req.tenantContext);
     await runtime.sendHtmlMail(runtime.client, {
@@ -747,7 +759,7 @@ export function createAdminApp(options = {}) {
       draft_html: finalHtml,
       completed_at: sentAt,
       summary: {
-        ...(run.summary || {}),
+        ...(claimedRun.summary || run.summary || {}),
         customerEmail: draft.to,
         customerSentAt: sentAt,
         editable_offer: rendered.normalized_editable_offer
@@ -760,6 +772,24 @@ export function createAdminApp(options = {}) {
     }, req.tenantContext);
     res.json({ ok: true, sent_at: sentAt });
   } catch (error) {
+    if (claimedRun && error.statusCode !== 409) {
+      const failedAt = new Date().toISOString();
+      await updateOfferRun(claimedRun.id, {
+        status: 'needs_review',
+        error_code: 'customer_delivery_failed',
+        error_message: error.message,
+        summary: {
+          ...(claimedRun.summary || {}),
+          customerDeliveryFailedAt: failedAt
+        }
+      }, req.tenantContext).catch(() => null);
+      await appendOfferRunEvent(claimedRun.id, {
+        event_type: 'customer_delivery_failed',
+        level: 'error',
+        message: `Customer mail delivery failed: ${error.message}`,
+        metadata: { error: error.message }
+      }, req.tenantContext).catch(() => null);
+    }
     res.status(error.statusCode || 500).json({ ok: false, error: error.message });
   }
   });
@@ -788,6 +818,10 @@ export function createAdminApp(options = {}) {
     const run = await loadOfferRun(req.params.id, req.tenantContext);
     if (!run) {
       res.status(404).json({ ok: false, error: 'run_not_found' });
+      return;
+    }
+    if (isFinalOfferRun(run)) {
+      res.status(409).json({ ok: false, error: 'run_finalized' });
       return;
     }
     const expectedVersion = Number(req.body?.version);
@@ -1539,6 +1573,10 @@ function normalizeCustomerSendPayload(input = {}) {
     subject,
     editable_offer: normalizeEditableOffer(input.editable_offer || {})
   };
+}
+
+function isFinalOfferRun(run = {}) {
+  return ['sent_to_customer', 'rejected'].includes(run.status);
 }
 
 function renderEditableOfferForRun(run, editableOfferInput = {}) {
