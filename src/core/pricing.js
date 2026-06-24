@@ -9,6 +9,7 @@ import {
 export function calculateInquiryOffer(inquiry, preisliste = [], settings = {}) {
   const masterPriceRows = preisliste.length ? preisliste : loadEduardLegacyPriceRows();
   let serviceSummeNetto = 0;
+  const serviceItems = [];
   const positionen = [];
   const prices = (inquiry.line_items || []).map((item) => Number(item.preis_mail_brutto_num) || 0);
   const maxPrice = Math.max(0, ...prices);
@@ -43,6 +44,7 @@ export function calculateInquiryOffer(inquiry, preisliste = [], settings = {}) {
 
     if (/coc|typisierung|service|bereitstellung/.test(nameLower)) {
       serviceSummeNetto += preisNetto;
+      serviceItems.push({ name: cleanName, uvp_netto: preisNetto });
     } else {
       const catalogPosition = catalogProduct ? productToOfferPosition(catalogProduct) : null;
       const catalogMeta = catalogPosition ? {
@@ -66,16 +68,19 @@ export function calculateInquiryOffer(inquiry, preisliste = [], settings = {}) {
     }
   }
 
+  const serviceAdjustment = resolveServiceAdjustment(serviceSummeNetto, serviceItems, settings.pricing);
+  serviceSummeNetto = serviceAdjustment.uvp_netto;
+
   if (positionen.length === 0 && serviceSummeNetto > 0) {
     positionen.push({
-      produkt_name: 'Dienstleistung (inkl. COC & Typisierung)',
+      produkt_name: `Dienstleistung (inkl. ${serviceAdjustment.label})`,
       uvp_netto: serviceSummeNetto,
       kategorie: 'zubehoer'
     });
   } else if (positionen.length > 0) {
     positionen[0].uvp_netto += serviceSummeNetto;
     if (!positionen[0].produkt_name.includes('(inkl. COC & Typisierung)')) {
-      positionen[0].produkt_name += ' (inkl. COC & Typisierung)';
+      positionen[0].produkt_name += ` (inkl. ${serviceAdjustment.label})`;
     }
   }
 
@@ -83,6 +88,31 @@ export function calculateInquiryOffer(inquiry, preisliste = [], settings = {}) {
     ...inquiry,
     kalkulation_anfrage: calculate(positionen, settings.pricing)
   };
+}
+
+function resolveServiceAdjustment(serviceSummeNetto, serviceItems = [], pricing = {}) {
+  const total = Number(serviceSummeNetto) || 0;
+  const hasCocTypisierung = serviceItems.some((item) => /coc|typisierung/i.test(item.name || ''));
+  const basisNetto = Number(pricing?.cocTypisierungBasisNetto);
+  const factor = Number(pricing?.cocTypisierungFactor ?? 1);
+  if (hasCocTypisierung && Number.isFinite(basisNetto) && basisNetto > 0 && Number.isFinite(factor) && factor > 0) {
+    const adjusted = basisNetto * factor;
+    return {
+      uvp_netto: adjusted,
+      label: `COC & Typisierung ${formatGermanMoney(adjusted)} netto`
+    };
+  }
+  return {
+    uvp_netto: total,
+    label: 'COC & Typisierung'
+  };
+}
+
+function formatGermanMoney(value) {
+  return new Intl.NumberFormat('de-AT', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(Number(value) || 0);
 }
 
 export function calculate(items, pricing = {}) {

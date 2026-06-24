@@ -296,6 +296,31 @@ test('calculates 87 percent rounded offer like the n8n workflow', () => {
   assert.equal(result.kalkulation_anfrage.positionen[0].kategorie, 'anhaenger');
 });
 
+test('applies configured COC Typisierung basis factor before trailer discount', () => {
+  const inquiry = {
+    line_items: [
+      { produkt_name_original: 'Hochlader 3318 3500kg', preis_mail_brutto_num: 3000 },
+      { produkt_name_original: 'COC', preis_mail_brutto_num: 12.5 },
+      { produkt_name_original: 'Typisierung', preis_mail_brutto_num: 33.33 }
+    ]
+  };
+
+  const result = calculateInquiryOffer(inquiry, [], {
+    pricing: {
+      offerFactor: 1,
+      roundTo: 1,
+      vatRate: 0.2,
+      cocTypisierungBasisNetto: 55.83,
+      cocTypisierungFactor: 1.2
+    }
+  });
+
+  const trailer = result.kalkulation_anfrage.positionen[0];
+  assert.equal(trailer.uvp_netto, 3067);
+  assert.match(trailer.produkt_name, /inkl\. COC & Typisierung 67,00 netto/);
+  assert.equal(result.kalkulation_anfrage.gesamt_uvp_netto, 3067);
+});
+
 test('applies separate trailer and accessory discount rules', () => {
   const result = runWorkflow({
     subject: 'Eduard Anfrage',
