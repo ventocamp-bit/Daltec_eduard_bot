@@ -782,22 +782,42 @@ test('review draft html composer preserves n8n table styling and edited prices',
   assert.match(html, /Rabatt/);
   assert.match(html, /Angebot Netto/);
   assert.doesNotMatch(html, /UVP brutto|Angebot brutto/);
-  assert.match(html, /width:100%;box-sizing:border-box;text-align:center;background-color:#ffffff;padding:20px 12px/);
-  assert.match(html, /max-width:800px;width:100%;box-sizing:border-box;margin:0 auto;text-align:left;overflow-wrap:break-word/);
-  assert.match(html, /font-size:18px;line-height:1\.2;text-align:center/);
-  assert.match(html, /border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;line-height:1\.4;color:#000;width:100%;max-width:680px;box-sizing:border-box;margin:0 auto 24px auto;table-layout:fixed/);
-  assert.match(html, /box-sizing:border-box;word-break:break-word/);
-  assert.match(html, /box-sizing:border-box;text-align:left;width:37%/);
-  assert.match(html, /box-sizing:border-box;text-align:right;width:21%/);
-  assert.match(html, /box-sizing:border-box;text-align:right;width:20%/);
-  assert.match(html, /box-sizing:border-box;text-align:right;width:22%/);
-  assert.match(html, /background:#FFC000;font-weight:bold;color:#000/);
-  assert.match(html, /border:1px solid #000/);
-  assert.match(html, /background:#f9f9f9;font-weight:bold;border-top:2px solid #000/);
+  assert.match(html, /width:100%;box-sizing:border-box;text-align:center;background-color:#ffffff;padding:20px 0/);
+  assert.match(html, /max-width:760px;width:100%;box-sizing:border-box;margin:0 auto;text-align:left;overflow-wrap:break-word/);
+  assert.match(html, /table role="presentation" cellspacing="0" cellpadding="0" border="0"/);
+  assert.match(html, /border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1\.4;color:#000;width:100%;max-width:760px;box-sizing:border-box;margin:0 auto 22px auto;table-layout:fixed/);
+  assert.match(html, /box-sizing:border-box;text-align:left;vertical-align:top;word-break:break-word/);
+  assert.match(html, /box-sizing:border-box;text-align:left;width:40%/);
+  assert.match(html, /box-sizing:border-box;text-align:center;width:20%/);
+  assert.match(html, /box-sizing:border-box;text-align:center;width:18%/);
+  assert.match(html, /box-sizing:border-box;text-align:center;width:22%/);
+  assert.match(html, /background:#F2B400;font-weight:bold;color:#000/);
+  assert.match(html, /border:1px solid #222222/);
+  assert.match(html, /20% Mehrwertsteuer/);
   assert.match(html, /color:#c00000;font-weight:bold/);
   assert.match(html, /font-family:Arial,sans-serif;font-size:14px/);
   assert.match(html, /Bearbeiteter Hinweis/);
-  assert.match(html, /border:1px solid #ccc;background:#f9f9f9;padding:20px;box-sizing:border-box/);
+  assert.match(html, /border:1px solid #d3d3d3;background:#fafafa;padding:18px 20px;box-sizing:border-box/);
+});
+
+test('review draft html composer uses tenant offer table color', () => {
+  const html = buildEditedDraftHtml({
+    tables: [{
+      title: 'WUNSCH-KONFIGURATION',
+      rows: [
+        { product: 'Hochlader', uvp: '€ 2.000,00', discount: '€ 227,20', offer: '€ 1.772,80' },
+        { product: 'Gesamt netto', uvp: '€ 2.000,00', discount: '€ 227,20', offer: '€ 1.772,80', type: 'total' },
+        { product: '20% MwSt.', uvp: '€ 400,00', discount: '€ 45,44', offer: '€ 354,56', type: 'vat' },
+        { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '€ 2.400,00', discount: '€ 272,64', offer: '€ 2.127,36', type: 'gross' }
+      ]
+    }],
+    settings: { theme: { offerTableHeaderBg: '#f7b500' } }
+  });
+
+  assert.match(html, /background:#F7B500;font-weight:bold;color:#000/);
+  assert.match(html, /20% Mehrwertsteuer/);
+  assert.match(html, /Gesamt Brutto \(inkl\. MwSt\.\)/);
+  assert.doesNotMatch(html, /background:#F2B400;font-weight:bold;color:#000/);
 });
 
 test('review draft html composer never renders NaN for empty price fields', () => {
@@ -823,7 +843,7 @@ test('review preview without upsell renders one pricing table', () => {
     ]
   });
 
-  assert.equal((html.match(/<table style=/g) || []).length, 1);
+  assert.equal((html.match(/<table role="presentation"/g) || []).length, 1);
   assert.doesNotMatch(html, /SOFORT AB LAGER VERF/);
 });
 
@@ -853,11 +873,11 @@ test('review preview with upsell renders two pricing tables from same mail html 
     ]
   });
 
-  assert.equal((html.match(/<table style=/g) || []).length, 2);
+  assert.equal((html.match(/<table role="presentation"/g) || []).length, 2);
   assert.match(html, /WUNSCH-KONFIGURATION/);
   assert.match(html, /SOFORT AB LAGER VERFÜGBAR/);
   assert.match(html, /Lager Hochlader/);
-  assert.match(html, /background:#FFC000;font-weight:bold;color:#000/);
+  assert.match(html, /background:#F2B400;font-weight:bold;color:#000/);
 });
 
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
@@ -931,7 +951,10 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /previewFrame\.srcdoc = result\.html/);
   assert.match(appSource, /\/render-editable-offer/);
   assert.match(serverSource, /app\.get\('\/api\/offer-runs\/:id\/review-state'/);
-  assert.match(serverSource, /buildReviewStateForRun\(run, editableOfferStateWithContentDefaults\(run, \{\}, settings\)\)/);
+  assert.match(serverSource, /buildReviewStateForRun\(run, editableOfferStateWithContentDefaults\(run, \{\}, settings\), settings\)/);
+  assert.match(appSource, /--offer-table-header-bg:/);
+  assert.match(appSource, /draft\.theme\?\.offerTableHeaderBg/);
+  assert.match(stylesSource, /background: var\(--offer-table-header-bg, #F2B400\)/);
   assert.match(serverSource, /const cc = settings\.mail\?\.cc \|\| config\.gmail\.cc \|\| ''/);
   assert.match(serverSource, /sendHtmlMail\(runtime\.client,\s*\{[\s\S]*to: draft\.to,[\s\S]*cc,[\s\S]*subject: draft\.subject,[\s\S]*html: finalHtml[\s\S]*\}\)/);
   assert.match(serverSource, /metadata: \{ to: draft\.to, cc, subject: draft\.subject, provider: runtime\.provider \|\| 'unknown' \}/);
@@ -1202,9 +1225,9 @@ test.skip('review send-to-customer endpoint validates sends edited draft and mar
       '<div style="font-family:Arial;font-size:14px;">',
       '<p>Sehr geehrte Frau Kunde, hier ist das bearbeitete Angebot.</p>',
       '<table style="border-collapse:collapse;font-family:Arial;font-size:14px;">',
-      '<tr style="background:#FFC000;font-weight:bold;color:#000;"><th style="border:1px solid #000;">Produkt</th><th style="border:1px solid #000;">UVP</th><th style="border:1px solid #000;color:#c00000;">Rabatt</th><th style="border:1px solid #000;">Angebot</th></tr>',
-      '<tr><td style="border:1px solid #000;">Bearbeiteter Hochlader</td><td style="border:1px solid #000;">€ 3.600,00</td><td style="border:1px solid #000;color:#c00000;font-weight:bold;">€ 410,00</td><td style="border:1px solid #000;">€ 3.190,00</td></tr>',
-      '<tr style="background:#FFC000;font-weight:bold;"><td style="border:1px solid #000;">Gesamt brutto</td><td style="border:1px solid #000;">€ 3.600,00</td><td style="border:1px solid #000;color:#c00000;">€ 410,00</td><td style="border:1px solid #000;">€ 3.190,00</td></tr>',
+      '<tr style="background:#F2B400;font-weight:bold;color:#000;"><th style="border:1px solid #222222;">Produkt</th><th style="border:1px solid #222222;">UVP</th><th style="border:1px solid #222222;color:#c00000;">Rabatt</th><th style="border:1px solid #222222;">Angebot</th></tr>',
+      '<tr><td style="border:1px solid #222222;">Bearbeiteter Hochlader</td><td style="border:1px solid #222222;">€ 3.600,00</td><td style="border:1px solid #222222;color:#c00000;font-weight:bold;">€ 410,00</td><td style="border:1px solid #222222;">€ 3.190,00</td></tr>',
+      '<tr style="background:#F2B400;font-weight:bold;"><td style="border:1px solid #222222;">Gesamt brutto</td><td style="border:1px solid #222222;">€ 3.600,00</td><td style="border:1px solid #222222;color:#c00000;">€ 410,00</td><td style="border:1px solid #222222;">€ 3.190,00</td></tr>',
       '</table><p>Hinweis nach Bearbeitung.</p><p>Beste Grüße<br>Lukas Mitter</p></div>'
     ].join('');
 

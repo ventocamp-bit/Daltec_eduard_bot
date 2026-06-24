@@ -92,7 +92,7 @@ function mergeEditableOffer(base, override) {
   };
 }
 
-export function renderEditableOfferHtml(state) {
+export function renderEditableOfferHtml(state, settings = {}) {
   const tables = [state.tables.requested];
   if (state.tables.inventory_alternative.enabled && state.tables.inventory_alternative.table) {
     tables.push(state.tables.inventory_alternative.table);
@@ -101,7 +101,8 @@ export function renderEditableOfferHtml(state) {
     intro: state.content.intro,
     tables,
     notes: state.content.notes,
-    signature: state.content.signature
+    signature: state.content.signature,
+    settings
   });
 }
 

@@ -183,7 +183,7 @@ export async function processOfferRun(runId, context = {}) {
       pricing_json: pricingJson,
       match_json: matchJson,
       draft_subject: draftSubject,
-      draft_html: renderEditableOfferHtml(editableState),
+      draft_html: renderEditableOfferHtml(editableState, settings),
       error_code: errorCode,
       error_message: errorMessage,
       summary: {

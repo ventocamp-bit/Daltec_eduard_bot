@@ -712,7 +712,7 @@ export function createAdminApp(options = {}) {
     const settings = await loadSettings(req.tenantContext);
     res.json({
       ok: true,
-      ...buildReviewStateForRun(run, editableOfferStateWithContentDefaults(run, {}, settings))
+      ...buildReviewStateForRun(run, editableOfferStateWithContentDefaults(run, {}, settings), settings)
     });
   } catch (error) {
     next(error);
@@ -1770,9 +1770,9 @@ function renderEditableOfferForRun(run, editableOfferInput = {}, settings = {}) 
   const state = editableOfferStateWithContentDefaults(run, editableOfferInput, settings);
   const inventory = state.tables.inventory_alternative;
   return {
-    html: renderEditableOfferHtml(state),
+    html: renderEditableOfferHtml(state, settings),
     normalized_editable_offer: state.editable_offer,
-    review_state: buildReviewStateForRun(run, state),
+    review_state: buildReviewStateForRun(run, state, settings),
     summary: {
       tableCount: inventory.enabled ? 2 : 1,
       inventorySource: inventory.enabled ? inventory.active_source || null : null,
@@ -1859,7 +1859,7 @@ function hasText(value) {
   return String(value || '').trim().length > 0;
 }
 
-function buildReviewStateForRun(run, state = buildEditableOfferState(run, { editable_offer: run.summary?.editable_offer || {} })) {
+function buildReviewStateForRun(run, state = buildEditableOfferState(run, { editable_offer: run.summary?.editable_offer || {} }), settings = run.config_snapshot?.settings || {}) {
   const customer = run.customer_json || {};
   const customerName = run.summary?.customerName || [customer.first_name, customer.last_name].filter(Boolean).join(' ');
   const inventory = state.tables.inventory_alternative || {};
@@ -1887,7 +1887,16 @@ function buildReviewStateForRun(run, state = buildEditableOfferState(run, { edit
     catalog: reviewCatalogFromRun(run),
     inventoryAlternativeAvailable: inventory.suggested === true || Boolean(inventory.table),
     inventoryAlternativeEnabled: inventory.enabled === true,
-    inventoryAlternativeName: inventory.source?.top_lager_name || inventory.table?.intro?.replace(/^Passendes Lagerfahrzeug:\s*/, '') || ''
+    inventoryAlternativeName: inventory.source?.top_lager_name || inventory.table?.intro?.replace(/^Passendes Lagerfahrzeug:\s*/, '') || '',
+    theme: reviewTheme(settings)
+  };
+}
+
+function reviewTheme(settings = {}) {
+  const candidate = settings.theme?.offerTableHeaderBg || '#F2B400';
+  const color = /^#[0-9a-f]{6}$/i.test(String(candidate || '')) ? String(candidate) : '#F2B400';
+  return {
+    offerTableHeaderBg: color.toUpperCase()
   };
 }
 

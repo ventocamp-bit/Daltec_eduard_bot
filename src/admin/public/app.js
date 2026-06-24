@@ -836,7 +836,7 @@ function runDetailHtml(run, options = {}) {
   const disabled = readOnly ? ' disabled' : '';
   const sendDisabled = testMode || needsManualCorrection ? ' disabled' : '';
   return `
-    <form class="draft-review" data-draft-review-form data-run-id="${escapeHtml(run.id)}" data-editable-offer-version="${Number(draft.version || run.summary?.editable_offer_version || 1)}">
+    <form class="draft-review" data-draft-review-form data-run-id="${escapeHtml(run.id)}" data-editable-offer-version="${Number(draft.version || run.summary?.editable_offer_version || 1)}" style="--offer-table-header-bg:${escapeHtml(draft.theme?.offerTableHeaderBg || '#F2B400')}">
       <div class="draft-review-head">
         <div>
           <p class="eyebrow">${readOnly ? 'Verlauf' : 'Draft Review'}</p>
@@ -967,7 +967,16 @@ function draftReviewState(run) {
     inventoryAlternativeName: extraTables[0]?.intro?.replace(/^Passendes Lagerfahrzeug:\s*/, '') || '',
     notes: saved.notes ?? draftNotesFromHtml(draftOriginalHtml(run)),
     signature: saved.signature ?? (paragraphs.at(-1) || defaultSignature(run.config_snapshot?.settings || {})),
-    catalog: catalogReadOnlySummary(run)
+    catalog: catalogReadOnlySummary(run),
+    theme: reviewTheme(run.config_snapshot?.settings || {})
+  };
+}
+
+function reviewTheme(settings = {}) {
+  const candidate = settings.theme?.offerTableHeaderBg || '#F2B400';
+  const color = /^#[0-9a-f]{6}$/i.test(String(candidate || '')) ? String(candidate) : '#F2B400';
+  return {
+    offerTableHeaderBg: color.toUpperCase()
   };
 }
 
