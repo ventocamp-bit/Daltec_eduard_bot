@@ -348,6 +348,231 @@ test('manual correction feedback flags the run and blocks customer send', async 
   }
 });
 
+test('public manual correction feedback sends one internal notification', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const sessionSecret = 'manual-correction-notify-secret';
+  const tenantId = `manual-correction-notify-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    DATABASE_URL: process.env.DATABASE_URL
+  };
+  process.env.APP_BASE_URL = 'https://angebote.daltec.at';
+  delete process.env.DATABASE_URL;
+  const sentMails = [];
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret,
+      cookieName: 'manual_correction_notify_session',
+      secureCookie: false
+    },
+    mailRuntimeFactory: async () => ({
+      provider: 'test',
+      client: null,
+      sendHtmlMail: async (client, message) => sentMails.push(message)
+    })
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const inbound = await ingestInboundMessage({
+      provider: 'manual_test',
+      provider_message_id: `manual-correction-notify-${Date.now()}`,
+      subject: 'Eduard Anfrage Notification Proof',
+      from_email: 'kunde@example.at',
+      raw_html: '<table><tr><td>Hochlader 3318</td><td>3000</td></tr></table>',
+      raw_text: ''
+    }, { tenantId });
+    const runId = inbound.run.id;
+    await updateOfferRun(runId, {
+      status: 'completed',
+      draft_subject: 'Angebot Notification Proof',
+      draft_html: '<p>Angebot</p>',
+      customer_json: { first_name: 'Michael', last_name: 'Proof', email: 'kunde@example.at' },
+      summary: { customerName: 'Michael Proof', customerEmail: 'kunde@example.at', editable_offer_version: 1 }
+    }, { tenantId });
+
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const sendableToken = createFeedbackToken({ tenantId, runId, rating: 'sendable' }, sessionSecret);
+    const sendable = await fetch(`${baseUrl}/feedback?token=${encodeURIComponent(sendableToken)}`);
+    assert.equal(sendable.status, 200);
+    assert.equal(sentMails.length, 0);
+
+    const correctionToken = createFeedbackToken({ tenantId, runId, rating: 'minor_correction' }, sessionSecret);
+    const correction = await fetch(`${baseUrl}/feedback?token=${encodeURIComponent(correctionToken)}`);
+    assert.equal(correction.status, 200);
+    assert.equal(sentMails.length, 1);
+    assert.equal(sentMails[0].to, 'ventocamp@gmail.com');
+    assert.match(sentMails[0].subject, /Daltec Korrektur nötig - Michael Proof/);
+    assert.match(sentMails[0].html, /manual correction required/);
+    assert.match(sentMails[0].html, new RegExp(runId));
+    assert.match(sentMails[0].html, /Eduard Anfrage Notification Proof/);
+    assert.match(sentMails[0].html, /https:\/\/angebote\.daltec\.at\/\?run=/);
+
+    const updated = await loadOfferRun(runId, { tenantId });
+    assert.equal(updated.summary.needsManualCorrection, true);
+    assert.equal(updated.owner_feedback.rating, 'minor_correction');
+    assert.equal(updated.events.some((event) => event.event_type === 'owner_feedback_recorded'), true);
+    assert.equal(updated.events.some((event) => event.event_type === 'owner_feedback_notification_sent'), true);
+
+    const repeatedCorrection = await fetch(`${baseUrl}/feedback?token=${encodeURIComponent(correctionToken)}`);
+    assert.equal(repeatedCorrection.status, 200);
+    assert.equal(sentMails.length, 1);
+    const repeated = await loadOfferRun(runId, { tenantId });
+    assert.equal(repeated.owner_feedback.rating, 'minor_correction');
+    assert.equal(repeated.events.some((event) => event.event_type === 'owner_feedback_notification_skipped'), true);
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await fs.rm(path.join('data', 'tenants', tenantId), { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('public manual correction feedback records failed internal notification', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const sessionSecret = 'manual-correction-notify-failed-secret';
+  const tenantId = `manual-correction-notify-failed-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    DATABASE_URL: process.env.DATABASE_URL
+  };
+  process.env.APP_BASE_URL = 'https://angebote.daltec.at';
+  delete process.env.DATABASE_URL;
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret,
+      cookieName: 'manual_correction_notify_failed_session',
+      secureCookie: false
+    },
+    mailRuntimeFactory: async () => ({
+      provider: 'test',
+      client: null,
+      sendHtmlMail: async () => {
+        throw new Error('notification transport unavailable');
+      }
+    })
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const inbound = await ingestInboundMessage({
+      provider: 'manual_test',
+      provider_message_id: `manual-correction-notify-failed-${Date.now()}`,
+      subject: 'Eduard Anfrage Notification Failure Proof',
+      from_email: 'kunde@example.at',
+      raw_html: '<table><tr><td>Hochlader 3318</td><td>3000</td></tr></table>',
+      raw_text: ''
+    }, { tenantId });
+    const runId = inbound.run.id;
+    await updateOfferRun(runId, {
+      status: 'completed',
+      draft_subject: 'Angebot Notification Failure Proof',
+      draft_html: '<p>Angebot</p>',
+      customer_json: { first_name: 'Michael', last_name: 'Failure', email: 'kunde@example.at' },
+      summary: { customerName: 'Michael Failure', customerEmail: 'kunde@example.at', editable_offer_version: 1 }
+    }, { tenantId });
+
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const correctionToken = createFeedbackToken({ tenantId, runId, rating: 'minor_correction' }, sessionSecret);
+    const correction = await fetch(`${baseUrl}/feedback?token=${encodeURIComponent(correctionToken)}`);
+    assert.equal(correction.status, 200);
+
+    const updated = await loadOfferRun(runId, { tenantId });
+    assert.equal(updated.summary.needsManualCorrection, true);
+    assert.equal(updated.owner_feedback.rating, 'minor_correction');
+    assert.equal(updated.events.some((event) => event.event_type === 'owner_feedback_recorded'), true);
+    const failedEvent = updated.events.find((event) => event.event_type === 'owner_feedback_notification_failed');
+    assert.ok(failedEvent);
+    assert.equal(failedEvent.level, 'warning');
+    assert.equal(failedEvent.message, 'notification transport unavailable');
+    assert.equal(failedEvent.metadata_json.to, 'ventocamp@gmail.com');
+    assert.match(failedEvent.metadata_json.reviewLink, /https:\/\/angebote\.daltec\.at\/\?run=/);
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await fs.rm(path.join('data', 'tenants', tenantId), { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('public manual correction notification failure keeps feedback saved', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const sessionSecret = 'manual-correction-notify-failure-secret';
+  const tenantId = `manual-correction-notify-failure-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const previousEnv = {
+    APP_BASE_URL: process.env.APP_BASE_URL,
+    DATABASE_URL: process.env.DATABASE_URL
+  };
+  process.env.APP_BASE_URL = 'https://angebote.daltec.at';
+  delete process.env.DATABASE_URL;
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret,
+      cookieName: 'manual_correction_notify_failure_session',
+      secureCookie: false
+    },
+    mailRuntimeFactory: async () => ({
+      provider: 'test',
+      client: null,
+      sendHtmlMail: async () => {
+        throw new Error('smtp_unavailable_for_test');
+      }
+    })
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const inbound = await ingestInboundMessage({
+      provider: 'manual_test',
+      provider_message_id: `manual-correction-notify-failure-${Date.now()}`,
+      subject: 'Eduard Anfrage Notification Failure Proof',
+      from_email: 'kunde@example.at',
+      raw_html: '<table><tr><td>Hochlader 3318</td><td>3000</td></tr></table>',
+      raw_text: ''
+    }, { tenantId });
+    const runId = inbound.run.id;
+    await updateOfferRun(runId, {
+      status: 'completed',
+      draft_subject: 'Angebot Notification Failure Proof',
+      draft_html: '<p>Angebot</p>',
+      customer_json: { first_name: 'Failure', last_name: 'Proof', email: 'kunde@example.at' },
+      summary: { customerName: 'Failure Proof', customerEmail: 'kunde@example.at', editable_offer_version: 1 }
+    }, { tenantId });
+
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const correctionToken = createFeedbackToken({ tenantId, runId, rating: 'minor_correction' }, sessionSecret);
+    const correction = await fetch(`${baseUrl}/feedback?token=${encodeURIComponent(correctionToken)}`);
+    assert.equal(correction.status, 200);
+    assert.match(await correction.text(), /Feedback gespeichert/);
+
+    const updated = await loadOfferRun(runId, { tenantId });
+    assert.equal(updated.summary.needsManualCorrection, true);
+    assert.equal(updated.owner_feedback.rating, 'minor_correction');
+    assert.equal(updated.events.some((event) => event.event_type === 'owner_feedback_recorded'), true);
+    assert.equal(updated.events.some((event) => event.event_type === 'owner_feedback_notification_failed'), true);
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await fs.rm(path.join('data', 'tenants', tenantId), { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('microsoft oauth start redirects and callback stores tenant token', async () => {
   const passwordHash = createPasswordHash('secret-pass');
   const sessionSecret = 'microsoft-session-secret';

@@ -165,7 +165,11 @@ export function createAdminApp(options = {}) {
   app.get('/feedback', async (req, res, next) => {
   try {
     const payload = verifyFeedbackToken(req.query.token, auth.sessionSecret);
-    await recordOwnerFeedback(payload.runId, { rating: payload.rating }, tenantContext({ tenantId: payload.tenantId }));
+    const context = tenantContext({ tenantId: payload.tenantId });
+    const updated = await recordOwnerFeedback(payload.runId, { rating: payload.rating }, context);
+    if (payload.rating === 'minor_correction') {
+      await notifyManualCorrectionRequested(await loadOfferRun(updated.id, context), context, { mailRuntimeFactory });
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(`<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Feedback gespeichert</title><style>body{font-family:Arial,sans-serif;background:#f3f4f6;margin:0;display:grid;place-items:center;min-height:100vh;color:#111827}.box{background:#fff;border:1px solid #e1e5eb;border-radius:8px;padding:24px;max-width:460px}strong{display:block;font-size:20px;margin-bottom:8px}</style></head><body><div class="box"><strong>Feedback gespeichert</strong><p>Danke. Die Bewertung wurde im Flight Recorder gespeichert.</p><p>Sie können dieses Fenster schließen.</p></div></body></html>`);
   } catch (error) {
@@ -992,6 +996,61 @@ export function createAdminApp(options = {}) {
   });
 
   return app;
+}
+
+async function notifyManualCorrectionRequested(run, context = {}, options = {}) {
+  const to = 'ventocamp@gmail.com';
+  const config = loadConfig();
+  const runtimeFactory = options.mailRuntimeFactory || ((runtimeConfig, runtimeContext) => createMailRuntime(runtimeConfig, runtimeContext));
+  const tenantId = context.tenantId || run.dealer_id || 'daltec-local';
+  const customerName = run.summary?.customerName ||
+    [run.customer_json?.first_name, run.customer_json?.last_name].filter(Boolean).join(' ') ||
+    run.customer_json?.email ||
+    run.summary?.customerEmail ||
+    'Unbekannter Kunde';
+  const inquirySubject = run.inbound_message?.subject || run.draft_subject || 'Anfrage ohne Betreff';
+  const reviewLink = `${String(config.app?.baseUrl || '').replace(/\/$/, '')}/?run=${encodeURIComponent(run.id)}`;
+  const subject = `Daltec Korrektur nötig - ${customerName || inquirySubject}`;
+  if ((run.events || []).some((event) => event.event_type === 'owner_feedback_notification_sent')) {
+    await appendOfferRunEvent(run.id, {
+      event_type: 'owner_feedback_notification_skipped',
+      level: 'info',
+      message: `Manual correction notification already sent to ${to}`,
+      metadata: { to, subject, tenantId, reviewLink, reason: 'already_sent' }
+    }, context);
+    return;
+  }
+  const html = `
+    <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#111827;">
+      <p>Michael hat <strong>Korrektur nötig</strong> geklickt.</p>
+      <p><strong>Status:</strong> manual correction required</p>
+      <p><strong>Händler/Tenant:</strong> ${escapeHtml(tenantId)}</p>
+      <p><strong>Run-ID:</strong> ${escapeHtml(run.id)}</p>
+      <p><strong>Kunde:</strong> ${escapeHtml(customerName)}</p>
+      <p><strong>Anfrage/Betreff:</strong> ${escapeHtml(inquirySubject)}</p>
+      <p><a href="${escapeHtml(reviewLink)}">Run im Admin Review öffnen</a></p>
+    </div>
+  `;
+  try {
+    const runtime = await runtimeFactory(config, context);
+    await runtime.sendHtmlMail(runtime.client, {
+      to,
+      subject,
+      html
+    });
+    await appendOfferRunEvent(run.id, {
+      event_type: 'owner_feedback_notification_sent',
+      message: `Manual correction notification sent to ${to}`,
+      metadata: { to, subject, tenantId, reviewLink }
+    }, context);
+  } catch (error) {
+    await appendOfferRunEvent(run.id, {
+      event_type: 'owner_feedback_notification_failed',
+      level: 'warning',
+      message: error.message,
+      metadata: { to, tenantId, reviewLink }
+    }, context);
+  }
 }
 
 function createDefaultImapRegistry() {
