@@ -391,6 +391,7 @@ test('public manual correction feedback sends one internal notification', async 
       draft_subject: 'Angebot Notification Proof',
       draft_html: '<p>Angebot</p>',
       customer_json: { first_name: 'Michael', last_name: 'Proof', email: 'kunde@example.at' },
+      line_items_json: [{ produkt_name_original: 'Cargo-Hochlader 311x160' }],
       summary: { customerName: 'Michael Proof', customerEmail: 'kunde@example.at', editable_offer_version: 1 }
     }, { tenantId });
 
@@ -407,6 +408,9 @@ test('public manual correction feedback sends one internal notification', async 
     assert.equal(sentMails[0].to, 'ventocamp@gmail.com');
     assert.match(sentMails[0].subject, /Daltec Korrektur nötig - Michael Proof/);
     assert.match(sentMails[0].html, /manual correction required/);
+    assert.match(sentMails[0].html, /Customer-Send ist blockiert/);
+    assert.match(sentMails[0].html, /kunde@example\.at/);
+    assert.match(sentMails[0].html, /Cargo-Hochlader 311x160/);
     assert.match(sentMails[0].html, new RegExp(runId));
     assert.match(sentMails[0].html, /Eduard Anfrage Notification Proof/);
     assert.match(sentMails[0].html, /https:\/\/angebote\.daltec\.at\/\?run=/);
@@ -415,7 +419,10 @@ test('public manual correction feedback sends one internal notification', async 
     assert.equal(updated.summary.needsManualCorrection, true);
     assert.equal(updated.owner_feedback.rating, 'minor_correction');
     assert.equal(updated.events.some((event) => event.event_type === 'owner_feedback_recorded'), true);
-    assert.equal(updated.events.some((event) => event.event_type === 'owner_feedback_notification_sent'), true);
+    const sentEvent = updated.events.find((event) => event.event_type === 'owner_feedback_notification_sent');
+    assert.ok(sentEvent);
+    assert.equal(sentEvent.metadata_json.customerEmail, 'kunde@example.at');
+    assert.equal(sentEvent.metadata_json.firstPosition, 'Cargo-Hochlader 311x160');
 
     const repeatedCorrection = await fetch(`${baseUrl}/feedback?token=${encodeURIComponent(correctionToken)}`);
     assert.equal(repeatedCorrection.status, 200);
@@ -934,9 +941,9 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /needsManualCorrection/);
   assert.match(stylesSource, /\.review-flags\.manual-correction/);
   assert.match(serverSource, /manual_correction_required/);
-  assert.match(ownerSource, /Angebot für Kundensendung bewerten/);
-  assert.match(ownerSource, /\['sendable', 'Sendbar'\]/);
-  assert.match(ownerSource, /\['minor_correction', 'Korrektur nötig'\]/);
+  assert.match(ownerSource, /Bitte kurz entscheiden/);
+  assert.match(ownerSource, /\['sendable', 'Sendbar - kann raus'\]/);
+  assert.match(ownerSource, /\['minor_correction', 'Korrektur nötig - bitte prüfen'\]/);
   assert.doesNotMatch(ownerSource, /\['wrong', 'Falsch'\]/);
   assert.match(htmlSource, /id="inbound-status-list"/);
   assert.match(appSource, /const inboundStatusListEl = document\.querySelector\('#inbound-status-list'\)/);

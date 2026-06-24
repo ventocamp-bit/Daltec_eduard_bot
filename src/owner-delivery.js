@@ -58,8 +58,8 @@ function wrapOwnerDraftWithFeedback(run, html, config, settings) {
   const secret = authConfig().sessionSecret;
   const tenantId = run.dealer_id || settings.dealer?.id || 'daltec-local';
   const links = [
-    ['sendable', 'Sendbar'],
-    ['minor_correction', 'Korrektur nötig']
+    ['sendable', 'Sendbar - kann raus'],
+    ['minor_correction', 'Korrektur nötig - bitte prüfen']
   ].map(([rating, label]) => {
     const token = createFeedbackToken({ tenantId, runId: run.id, rating }, secret);
     const href = `${baseUrl}/feedback?token=${encodeURIComponent(token)}`;
@@ -70,8 +70,8 @@ function wrapOwnerDraftWithFeedback(run, html, config, settings) {
     : '';
   return `
     <div style="border:1px solid #d4dae3;border-radius:8px;padding:16px;margin:0 0 24px 0;background:#f8fafc;">
-      <p style="margin:0 0 8px 0;color:#111827;font-family:Arial,sans-serif;font-size:15px;"><strong>Angebot für Kundensendung bewerten</strong></p>
-      <p style="margin:0 0 14px 0;color:#475467;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;">Bitte markieren: Ist der Entwurf sendbar oder muss er vorher manuell korrigiert werden?</p>
+      <p style="margin:0 0 8px 0;color:#111827;font-family:Arial,sans-serif;font-size:15px;"><strong>Bitte kurz entscheiden</strong></p>
+      <p style="margin:0 0 14px 0;color:#475467;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;">Wenn alles passt: <strong>Sendbar</strong>. Wenn Lukas noch etwas ändern soll: <strong>Korrektur nötig</strong>.</p>
       ${errorText}
       ${links}
     </div>

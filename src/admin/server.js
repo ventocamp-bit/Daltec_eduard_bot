@@ -1008,7 +1008,9 @@ async function notifyManualCorrectionRequested(run, context = {}, options = {}) 
     run.customer_json?.email ||
     run.summary?.customerEmail ||
     'Unbekannter Kunde';
+  const customerEmail = run.customer_json?.email || run.summary?.customerEmail || 'Unbekannte E-Mail';
   const inquirySubject = run.inbound_message?.subject || run.draft_subject || 'Anfrage ohne Betreff';
+  const firstPosition = summarizeFirstPosition(run);
   const reviewLink = `${String(config.app?.baseUrl || '').replace(/\/$/, '')}/?run=${encodeURIComponent(run.id)}`;
   const subject = `Daltec Korrektur nötig - ${customerName || inquirySubject}`;
   if ((run.events || []).some((event) => event.event_type === 'owner_feedback_notification_sent')) {
@@ -1023,10 +1025,13 @@ async function notifyManualCorrectionRequested(run, context = {}, options = {}) 
   const html = `
     <div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.5;color:#111827;">
       <p>Michael hat <strong>Korrektur nötig</strong> geklickt.</p>
-      <p><strong>Status:</strong> manual correction required</p>
+      <p><strong>Nächster Schritt:</strong> Run öffnen, Entwurf manuell korrigieren und erst danach senden.</p>
+      <p><strong>Status:</strong> manual correction required - Customer-Send ist blockiert.</p>
       <p><strong>Händler/Tenant:</strong> ${escapeHtml(tenantId)}</p>
       <p><strong>Run-ID:</strong> ${escapeHtml(run.id)}</p>
       <p><strong>Kunde:</strong> ${escapeHtml(customerName)}</p>
+      <p><strong>Kunden-E-Mail:</strong> ${escapeHtml(customerEmail)}</p>
+      <p><strong>Erste Position:</strong> ${escapeHtml(firstPosition)}</p>
       <p><strong>Anfrage/Betreff:</strong> ${escapeHtml(inquirySubject)}</p>
       <p><a href="${escapeHtml(reviewLink)}">Run im Admin Review öffnen</a></p>
     </div>
@@ -1041,7 +1046,7 @@ async function notifyManualCorrectionRequested(run, context = {}, options = {}) 
     await appendOfferRunEvent(run.id, {
       event_type: 'owner_feedback_notification_sent',
       message: `Manual correction notification sent to ${to}`,
-      metadata: { to, subject, tenantId, reviewLink }
+      metadata: { to, subject, tenantId, reviewLink, customerEmail, firstPosition }
     }, context);
   } catch (error) {
     await appendOfferRunEvent(run.id, {
@@ -1051,6 +1056,13 @@ async function notifyManualCorrectionRequested(run, context = {}, options = {}) 
       metadata: { to, tenantId, reviewLink }
     }, context);
   }
+}
+
+function summarizeFirstPosition(run = {}) {
+  const firstPriced = Array.isArray(run.pricing_json?.positionen) ? run.pricing_json.positionen[0] : null;
+  if (firstPriced?.produkt_name) return firstPriced.produkt_name;
+  const firstLineItem = Array.isArray(run.line_items_json) ? run.line_items_json[0] : null;
+  return firstLineItem?.produkt_name_original || firstLineItem?.produkt_name || 'Keine Position erkannt';
 }
 
 function createDefaultImapRegistry() {
