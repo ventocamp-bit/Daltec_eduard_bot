@@ -18,7 +18,7 @@ import { createFeedbackToken } from '../src/feedback-token.js';
 import { inspectRuntimeReadiness } from '../src/production-readiness.js';
 import { checkEditableOfferConsistency } from '../src/core/editable-offer.js';
 import { loadSettings, saveSettings } from '../src/settings.js';
-import { processOfferRun } from '../src/offer-run-service.js';
+import { processOfferRun, recordOwnerFeedback } from '../src/offer-run-service.js';
 import { ingestInboundMessage, loadOfferRun, updateOfferRun } from '../src/storage.js';
 
 test('password hashes verify only the original password', () => {
@@ -268,6 +268,83 @@ test('admin tenant is selected from host header', async () => {
     assert.equal(proof.status, 200);
   } finally {
     server.close();
+  }
+});
+
+test('manual correction feedback flags the run and blocks customer send', async () => {
+  const passwordHash = createPasswordHash('secret-pass');
+  const sessionSecret = 'manual-correction-session-secret';
+  const tenantId = `manual-correction-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const host = 'manual-correction.example.at';
+  const previousEnv = {
+    TENANT_HOST_MAP: process.env.TENANT_HOST_MAP,
+    DATABASE_URL: process.env.DATABASE_URL
+  };
+  process.env.TENANT_HOST_MAP = `${host}=${tenantId}`;
+  delete process.env.DATABASE_URL;
+
+  const app = createAdminApp({
+    auth: {
+      email: 'owner@example.com',
+      secret: passwordHash,
+      sessionSecret,
+      cookieName: 'manual_correction_session',
+      secureCookie: false
+    }
+  });
+  const server = http.createServer(app);
+  await new Promise((resolve) => server.listen(0, resolve));
+
+  try {
+    const inbound = await ingestInboundMessage({
+      provider: 'manual_test',
+      provider_message_id: `manual-correction-${Date.now()}`,
+      subject: 'Eduard Anfrage',
+      from_email: 'kunde@example.at',
+      raw_html: '<table><tr><td>Hochlader 3318</td><td>3000</td></tr></table>',
+      raw_text: ''
+    }, { tenantId });
+    const runId = inbound.run.id;
+    await updateOfferRun(runId, {
+      status: 'completed',
+      draft_subject: 'Angebot',
+      draft_html: '<p>Angebot</p>',
+      summary: { editable_offer_version: 1 }
+    }, { tenantId });
+
+    const flagged = await recordOwnerFeedback(runId, { rating: 'minor_correction', notes: 'Bitte korrigieren' }, { tenantId });
+    assert.equal(flagged.owner_feedback.rating, 'minor_correction');
+    assert.equal(flagged.summary.needsManualCorrection, true);
+    const loadedFlagged = await loadOfferRun(runId, { tenantId });
+    assert.equal(loadedFlagged.events.some((event) => event.event_type === 'owner_feedback_recorded'), true);
+
+    const baseUrl = `http://127.0.0.1:${server.address().port}`;
+    const login = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-Host': host },
+      body: JSON.stringify({ email: 'owner@example.com', password: 'secret-pass' })
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie');
+
+    const blockedSend = await fetch(`${baseUrl}/api/offer-runs/${runId}/send-to-customer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie, 'X-Forwarded-Host': host },
+      body: JSON.stringify({})
+    });
+    assert.equal(blockedSend.status, 409);
+    assert.deepEqual(await blockedSend.json(), { ok: false, error: 'manual_correction_required' });
+
+    const cleared = await recordOwnerFeedback(runId, { rating: 'sendable' }, { tenantId });
+    assert.equal(cleared.owner_feedback.rating, 'sendable');
+    assert.equal(cleared.summary.needsManualCorrection, false);
+  } finally {
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await fs.rm(path.join('data', 'tenants', tenantId), { recursive: true, force: true });
+    await new Promise((resolve) => server.close(resolve));
   }
 });
 
@@ -545,6 +622,7 @@ test('review UI source contains prefilled fields spinner and success state hooks
   const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');
   const htmlSource = await fs.readFile(path.join('src', 'admin', 'public', 'index.html'), 'utf8');
   const stylesSource = await fs.readFile(path.join('src', 'admin', 'public', 'styles.css'), 'utf8');
+  const ownerSource = await fs.readFile(path.join('src', 'owner-delivery.js'), 'utf8');
   assert.match(appSource, /data-draft-field="to" type="email" value="\$\{escapeHtml\(draft\.to\)\}"/);
   assert.match(appSource, /data-copy-customer-email/);
   assert.match(appSource, /navigator\.clipboard\.writeText\(text\)/);
@@ -616,6 +694,14 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(serverSource, /metadata: \{ to: draft\.to, cc, subject: draft\.subject, provider: runtime\.provider \|\| 'unknown' \}/);
   assert.match(appSource, /editableOfferRenderSequence/);
   assert.match(appSource, /request\(`\/api\/offer-runs\/\$\{encodeURIComponent\(runId\)\}\/send-to-customer`/);
+  assert.match(appSource, /Manuelle Korrektur nötig/);
+  assert.match(appSource, /needsManualCorrection/);
+  assert.match(stylesSource, /\.review-flags\.manual-correction/);
+  assert.match(serverSource, /manual_correction_required/);
+  assert.match(ownerSource, /Angebot für Kundensendung bewerten/);
+  assert.match(ownerSource, /\['sendable', 'Sendbar'\]/);
+  assert.match(ownerSource, /\['minor_correction', 'Korrektur nötig'\]/);
+  assert.doesNotMatch(ownerSource, /\['wrong', 'Falsch'\]/);
   assert.match(htmlSource, /id="inbound-status-list"/);
   assert.match(appSource, /const inboundStatusListEl = document\.querySelector\('#inbound-status-list'\)/);
   assert.match(appSource, /request\('\/api\/inbound-status\?limit=25'\)/);

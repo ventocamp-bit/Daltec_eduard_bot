@@ -1078,6 +1078,13 @@ iframe {
   grid-template-columns: minmax(0, 1fr) auto;
 }
 
+.review-flags.manual-correction {
+  background: #fff7ed;
+  border-color: #fb923c;
+  color: #9a3412;
+  font-weight: 700;
+}
+
 .draft-ssot-note strong,
 .draft-ssot-note span {
   display: block;

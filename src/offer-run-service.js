@@ -266,7 +266,12 @@ export async function recordOwnerFeedback(runId, payload = {}, context = {}) {
     owner_feedback: feedback,
     summary: {
       ...(run.summary || {}),
-      ownerFeedback: feedback
+      ownerFeedback: feedback,
+      needsManualCorrection: rating === 'minor_correction'
+        ? true
+        : rating === 'sendable'
+          ? false
+          : run.summary?.needsManualCorrection === true
     }
   }, context);
   await appendOfferRunEvent(runId, {

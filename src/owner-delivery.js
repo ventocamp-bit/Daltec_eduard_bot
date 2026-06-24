@@ -59,19 +59,19 @@ function wrapOwnerDraftWithFeedback(run, html, config, settings) {
   const tenantId = run.dealer_id || settings.dealer?.id || 'daltec-local';
   const links = [
     ['sendable', 'Sendbar'],
-    ['minor_correction', 'Kleine Korrektur nötig'],
-    ['wrong', 'Falsch']
+    ['minor_correction', 'Korrektur nötig']
   ].map(([rating, label]) => {
     const token = createFeedbackToken({ tenantId, runId: run.id, rating }, secret);
     const href = `${baseUrl}/feedback?token=${encodeURIComponent(token)}`;
-    return `<a href="${href}" style="display:inline-block;margin:0 8px 8px 0;padding:10px 12px;border-radius:6px;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;background:${rating === 'wrong' ? '#b42318' : rating === 'minor_correction' ? '#ffffff' : '#111827'};color:${rating === 'minor_correction' ? '#111827' : '#ffffff'};border:1px solid #d4dae3;">${escapeHtml(label)}</a>`;
+    return `<a href="${href}" style="display:inline-block;margin:0 12px 8px 0;padding:12px 16px;border-radius:6px;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;background:${rating === 'minor_correction' ? '#ffffff' : '#111827'};color:${rating === 'minor_correction' ? '#111827' : '#ffffff'};border:1px solid #d4dae3;">${escapeHtml(label)}</a>`;
   }).join('');
   const errorText = run.error_code
     ? `<p style="margin:0 0 10px 0;color:#92400e;font-family:Arial,sans-serif;font-size:13px;"><strong>Review-Grund:</strong> ${escapeHtml(run.error_code)} ${escapeHtml(run.error_message || '')}</p>`
     : '';
   return `
-    <div style="border:1px solid #d4dae3;border-radius:8px;padding:12px;margin:0 0 16px 0;background:#f8fafc;">
-      <p style="margin:0 0 10px 0;color:#111827;font-family:Arial,sans-serif;font-size:14px;"><strong>Entwurf bewerten</strong></p>
+    <div style="border:1px solid #d4dae3;border-radius:8px;padding:16px;margin:0 0 24px 0;background:#f8fafc;">
+      <p style="margin:0 0 8px 0;color:#111827;font-family:Arial,sans-serif;font-size:15px;"><strong>Angebot für Kundensendung bewerten</strong></p>
+      <p style="margin:0 0 14px 0;color:#475467;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;">Bitte markieren: Ist der Entwurf sendbar oder muss er vorher manuell korrigiert werden?</p>
       ${errorText}
       ${links}
     </div>

@@ -832,8 +832,9 @@ function runDetailHtml(run, options = {}) {
   const draft = options.reviewState || draftReviewState(run);
   const readOnly = options.readOnly === true;
   const testMode = isOnboardingTestRun(run);
+  const needsManualCorrection = run.summary?.needsManualCorrection === true;
   const disabled = readOnly ? ' disabled' : '';
-  const sendDisabled = testMode ? ' disabled' : '';
+  const sendDisabled = testMode || needsManualCorrection ? ' disabled' : '';
   return `
     <form class="draft-review" data-draft-review-form data-run-id="${escapeHtml(run.id)}" data-editable-offer-version="${Number(draft.version || run.summary?.editable_offer_version || 1)}">
       <div class="draft-review-head">
@@ -901,7 +902,7 @@ function runDetailHtml(run, options = {}) {
       <div class="draft-message" data-draft-message hidden></div>
       <div class="draft-actions"${readOnly ? ' hidden' : ''}>
         <button type="button" class="danger" data-reject-draft>Ablehnen</button>
-        <button type="submit" data-send-draft${sendDisabled}>${testMode ? 'Test-Draft' : 'Mail senden'}</button>
+        <button type="submit" data-send-draft${sendDisabled}>${needsManualCorrection ? 'Korrektur nötig' : testMode ? 'Test-Draft' : 'Mail senden'}</button>
       </div>
     </form>
   `;
@@ -1031,9 +1032,14 @@ function htmlToPlainText(html) {
 }
 
 function reviewFlagsHtml(run) {
+  const labels = [];
+  if (run.summary?.needsManualCorrection === true) {
+    labels.push('Manuelle Korrektur nötig');
+  }
   const text = reviewFlagText(reviewFlagCodesFromRun(run), run.error_code);
-  if (!text || text === 'keine Warnungen') return '';
-  return `<div class="review-flags">${escapeHtml(text)}</div>`;
+  if (text && text !== 'keine Warnungen') labels.push(text);
+  if (!labels.length) return '';
+  return `<div class="review-flags${run.summary?.needsManualCorrection === true ? ' manual-correction' : ''}">${labels.map(escapeHtml).join(' | ')}</div>`;
 }
 
 function reviewFlagCodesFromRun(run) {

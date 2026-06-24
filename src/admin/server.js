@@ -791,6 +791,10 @@ export function createAdminApp(options = {}) {
       res.status(404).json({ ok: false, error: 'run_not_found' });
       return;
     }
+    if (run.summary?.needsManualCorrection === true) {
+      res.status(409).json({ ok: false, error: 'manual_correction_required' });
+      return;
+    }
     const draft = normalizeCustomerSendPayload(req.body || {});
     const settings = await loadSettings(req.tenantContext);
     const rendered = renderEditableOfferForRun(run, draft.editable_offer, settings);
