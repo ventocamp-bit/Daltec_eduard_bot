@@ -183,7 +183,6 @@ async function load() {
   await refreshInboundStatus();
   await refreshOffers();
   await refreshRuns();
-  await preview();
   setStatus('Bereit');
 }
 
