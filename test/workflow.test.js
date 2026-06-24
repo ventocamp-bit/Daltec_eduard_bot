@@ -727,19 +727,12 @@ test('separates trailer and accessories in the offer table', () => {
   assert.match(result.offer.html_angebot, /Zubehör/);
 });
 
-test('inventory table (Tabelle 2) never shows accessories even when kalkulation_lager has zubehoer positions', () => {
-  // kalkulation_lager mit 1 Anhänger + 1 Zubehör-Position (defensiver Fall)
-  const lagerCalcWithAccessory = {
-    gesamt_uvp_brutto: 4800,
-    gesamt_angebot_brutto: 4180,
-    gesamt_rabatt_brutto: 620,
-    gesamt_uvp_netto: 4000,
-    gesamt_angebot_netto: 3483.33,
-    positionen: [
-      { produkt_name: 'Hochlader 3318 Lager', kategorie: 'anhaenger', uvp_netto: 3500, angebot_netto: 3050 },
-      { produkt_name: 'Plane unerwünscht', kategorie: 'zubehoer', uvp_netto: 500, angebot_netto: 433.33 }
-    ]
-  };
+test('Bild-2-Sollzustand: Tabelle 1 Anhaenger+Zubehoer, Tabelle 2 nur Lager-Anhaenger, Hinweistexte erhalten', () => {
+  // Vollstaendiger Sollzustand gemaess Daltec-Layout (Bild 2):
+  // Tabelle 1 = Wunschkonfiguration mit Anhaenger + Zubehoer-Sektion
+  // Tabelle 2 = nur Lager-Anhaenger, kein Zubehoer
+  // Lager-Zubehoer-Hinweistext vorhanden (oberhalb Tabelle 2)
+  // Hinweis-Bubble (LED/Montage) vorhanden (unterhalb)
   const context = {
     input_language: 'de',
     kunde_vorname: 'Max',
@@ -748,22 +741,52 @@ test('inventory table (Tabelle 2) never shows accessories even when kalkulation_
     hat_match: true,
     top_lager_name: 'Hochlader 3318 Lager',
     kalkulation_anfrage: {
-      gesamt_uvp_brutto: 3600,
-      gesamt_angebot_brutto: 3140,
-      gesamt_rabatt_brutto: 460,
+      gesamt_uvp_brutto: 4320,
+      gesamt_angebot_brutto: 3760,
+      gesamt_rabatt_brutto: 560,
+      gesamt_uvp_netto: 3600,
+      gesamt_angebot_netto: 3133.33,
       positionen: [
-        { produkt_name: 'Hochlader 3318 3500kg', kategorie: 'anhaenger', uvp_netto: 3000, angebot_netto: 2616.67 }
+        { produkt_name: 'Hochlader 3318 3500kg', kategorie: 'anhaenger', uvp_netto: 3000, angebot_netto: 2616.67 },
+        { produkt_name: 'Plane und Spriegel', kategorie: 'zubehoer', uvp_netto: 600, angebot_netto: 516.67 }
       ]
     },
-    kalkulation_lager: lagerCalcWithAccessory,
-    line_items: [],
-    upsell_daten: []
+    kalkulation_lager: {
+      gesamt_uvp_brutto: 4800,
+      gesamt_angebot_brutto: 4180,
+      gesamt_rabatt_brutto: 620,
+      gesamt_uvp_netto: 4000,
+      gesamt_angebot_netto: 3483.33,
+      positionen: [
+        { produkt_name: 'Hochlader 3318 Lager', kategorie: 'anhaenger', uvp_netto: 3500, angebot_netto: 3050 },
+        // Defensiv: Zubehoer darf NIE in Tabelle 2 erscheinen
+        { produkt_name: 'SOLLTE-NICHT-TABELLE2', kategorie: 'zubehoer', uvp_netto: 500, angebot_netto: 433.33 }
+      ]
+    },
+    // line_items mit LED -> loest Hinweis-Bubble aus
+    line_items: [
+      { produkt_name_original: 'Hochlader 3318 3500kg LED' },
+      { produkt_name_original: 'Plane und Spriegel' }
+    ],
+    // Art.-Nr. KEIN exakter Match -> hatMatch-Branch (2 Tabellen sichtbar)
+    upsell_daten: [{ angefragt: 'Hochlader', top_upsell: { 'Art.-Nr.': 'KEIN-MATCH' } }]
   };
   const offer = buildOfferEmail(context);
-  // Tabelle 2 (Lager) darf 'Plane unerwünscht' NICHT enthalten
-  assert.doesNotMatch(offer.html_angebot, /Plane unerwünscht/, 'Tabelle 2 zeigt Zubehör obwohl es nicht soll');
-  // Tabelle 2 (Lager) muss Anhänger enthalten
-  assert.match(offer.html_angebot, /Hochlader 3318 Lager/, 'Tabelle 2 zeigt keinen Anhänger');
+  const html = offer.html_angebot;
+
+  // 1. Tabelle 1 zeigt Wunschkonfiguration mit Anhaenger
+  assert.match(html, /Hochlader 3318 3500kg/, '1: Tabelle 1 zeigt keinen Anhaenger');
+  // 2. Tabelle 1 zeigt Zubehoer-Sektion (Sektionsueberschrift + Position)
+  assert.match(html, /Zubeh/, '2: Tabelle 1 zeigt keine Zubehoer-Sektion');
+  assert.match(html, /Plane und Spriegel/, '2: Tabelle 1 zeigt keine Zubehoer-Position');
+  // 3. Tabelle 2 zeigt Lager-Anhaenger
+  assert.match(html, /Hochlader 3318 Lager/, '3: Tabelle 2 zeigt keinen Lager-Anhaenger');
+  // 4. Tabelle 2 zeigt KEIN Zubehoer (Bug-Fix-Invariante)
+  assert.doesNotMatch(html, /SOLLTE-NICHT-TABELLE2/, '4: Tabelle 2 zeigt Zubehoer obwohl es nicht soll');
+  // 5. Lager-Zubehoer-Hinweistext vorhanden (oberhalb Tabelle 2)
+  assert.match(html, /Zubeh.{1,60}Basis-Fahrzeug/s, '5: Lager-Zubehoer-Hinweistext fehlt');
+  // 6. Hinweis-Bubble vorhanden (LED oder Montage - aus line_items)
+  assert.match(html, /Hinweis LED|Hinweis Montage/, '6: Hinweis-Bubble fehlt');
 });
 
 test('adds dynamic n8n hint texts for configured accessories and trailer risks', () => {
