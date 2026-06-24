@@ -611,6 +611,9 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /\/render-editable-offer/);
   assert.match(serverSource, /app\.get\('\/api\/offer-runs\/:id\/review-state'/);
   assert.match(serverSource, /buildReviewStateForRun\(run, editableOfferStateWithContentDefaults\(run, \{\}, settings\)\)/);
+  assert.match(serverSource, /const cc = settings\.mail\?\.cc \|\| config\.gmail\.cc \|\| ''/);
+  assert.match(serverSource, /sendHtmlMail\(runtime\.client,\s*\{[\s\S]*to: draft\.to,[\s\S]*cc,[\s\S]*subject: draft\.subject,[\s\S]*html: finalHtml[\s\S]*\}\)/);
+  assert.match(serverSource, /metadata: \{ to: draft\.to, cc, subject: draft\.subject, provider: runtime\.provider \|\| 'unknown' \}/);
   assert.match(appSource, /editableOfferRenderSequence/);
   assert.match(appSource, /request\(`\/api\/offer-runs\/\$\{encodeURIComponent\(runId\)\}\/send-to-customer`/);
   assert.match(htmlSource, /id="inbound-status-list"/);

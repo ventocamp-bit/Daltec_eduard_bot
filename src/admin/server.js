@@ -807,8 +807,10 @@ export function createAdminApp(options = {}) {
     }
     const config = loadConfig();
     const runtime = await mailRuntimeFactory(config, req.tenantContext);
+    const cc = settings.mail?.cc || config.gmail.cc || '';
     await runtime.sendHtmlMail(runtime.client, {
       to: draft.to,
+      cc,
       subject: draft.subject,
       html: finalHtml
     });
@@ -828,7 +830,7 @@ export function createAdminApp(options = {}) {
     await appendOfferRunEvent(run.id, {
       event_type: 'sent_to_customer',
       message: `Edited draft sent to customer ${draft.to}`,
-      metadata: { to: draft.to, subject: draft.subject, provider: runtime.provider || 'unknown' }
+      metadata: { to: draft.to, cc, subject: draft.subject, provider: runtime.provider || 'unknown' }
     }, req.tenantContext);
     res.json({ ok: true, sent_at: sentAt });
   } catch (error) {
