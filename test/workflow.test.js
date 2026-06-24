@@ -727,6 +727,45 @@ test('separates trailer and accessories in the offer table', () => {
   assert.match(result.offer.html_angebot, /Zubehör/);
 });
 
+test('inventory table (Tabelle 2) never shows accessories even when kalkulation_lager has zubehoer positions', () => {
+  // kalkulation_lager mit 1 Anhänger + 1 Zubehör-Position (defensiver Fall)
+  const lagerCalcWithAccessory = {
+    gesamt_uvp_brutto: 4800,
+    gesamt_angebot_brutto: 4180,
+    gesamt_rabatt_brutto: 620,
+    gesamt_uvp_netto: 4000,
+    gesamt_angebot_netto: 3483.33,
+    positionen: [
+      { produkt_name: 'Hochlader 3318 Lager', kategorie: 'anhaenger', uvp_netto: 3500, angebot_netto: 3050 },
+      { produkt_name: 'Plane unerwünscht', kategorie: 'zubehoer', uvp_netto: 500, angebot_netto: 433.33 }
+    ]
+  };
+  const context = {
+    input_language: 'de',
+    kunde_vorname: 'Max',
+    kunde_nachname: 'Mustermann',
+    kunde_email: 'max@example.com',
+    hat_match: true,
+    top_lager_name: 'Hochlader 3318 Lager',
+    kalkulation_anfrage: {
+      gesamt_uvp_brutto: 3600,
+      gesamt_angebot_brutto: 3140,
+      gesamt_rabatt_brutto: 460,
+      positionen: [
+        { produkt_name: 'Hochlader 3318 3500kg', kategorie: 'anhaenger', uvp_netto: 3000, angebot_netto: 2616.67 }
+      ]
+    },
+    kalkulation_lager: lagerCalcWithAccessory,
+    line_items: [],
+    upsell_daten: []
+  };
+  const offer = buildOfferEmail(context);
+  // Tabelle 2 (Lager) darf 'Plane unerwünscht' NICHT enthalten
+  assert.doesNotMatch(offer.html_angebot, /Plane unerwünscht/, 'Tabelle 2 zeigt Zubehör obwohl es nicht soll');
+  // Tabelle 2 (Lager) muss Anhänger enthalten
+  assert.match(offer.html_angebot, /Hochlader 3318 Lager/, 'Tabelle 2 zeigt keinen Anhänger');
+});
+
 test('adds dynamic n8n hint texts for configured accessories and trailer risks', () => {
   const result = runWorkflow({
     subject: 'Eduard Anfrage',

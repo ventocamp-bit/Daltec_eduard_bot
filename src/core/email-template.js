@@ -252,7 +252,13 @@ function tableHtml(calc, title, isInventory, settings, t) {
 }
 
 function groupedPositions(positionen, isInventory, t) {
-  if (isInventory) return positionen.map((position) => ({ position }));
+  if (isInventory) {
+    // Tabelle 2 zeigt ausschließlich Anhänger-Positionen.
+    // Zubehör (kategorie !== 'anhaenger' && kategorie gesetzt) wird nie in der Lager-Tabelle dargestellt.
+    const trailerOnly = positionen.filter((p) => !p.kategorie || p.kategorie === 'anhaenger');
+    return trailerOnly.map((position) => ({ position }));
+  }
+
 
   const trailers = positionen.filter((position) => position.kategorie === 'anhaenger');
   const accessories = positionen.filter((position) => position.kategorie !== 'anhaenger');
