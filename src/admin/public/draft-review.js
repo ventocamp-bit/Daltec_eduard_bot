@@ -5,7 +5,7 @@ export function buildEditedDraftHtml({ intro = '', rows = [], tables = null, not
   const entrepreneurHintHtml = entrepreneurHintToHtml(settings);
   return `
     <div style="width:100%;box-sizing:border-box;text-align:center;background-color:#ffffff;padding:20px 0;">
-      <div style="max-width:760px;width:100%;box-sizing:border-box;margin:0 auto;text-align:left;overflow-wrap:break-word;">
+      <div style="max-width:680px;width:100%;box-sizing:border-box;margin:0 auto;text-align:left;overflow-wrap:break-word;">
         ${textBlockToHtml(intro)}
         ${tablesHtml}
         ${entrepreneurHintHtml}
@@ -39,7 +39,7 @@ function draftTableHtml(table, theme) {
         ? 'background:#ffffff;color:#000;'
         : 'background:#fff;color:#000;';
     const discountStyle = 'color:#c00000;font-weight:bold;';
-    return `<tr style="${rowStyle}"><td style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:left;vertical-align:top;word-break:break-word;">${escapeHtml(displayRowProduct(row))}</td><td style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:right;white-space:nowrap;">${escapeHtml(row.uvp)}</td><td style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:right;white-space:nowrap;${discountStyle}">${escapeHtml(row.discount)}</td><td style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:right;white-space:nowrap;">${escapeHtml(row.offer)}</td></tr>`;
+    return `<tr style="${rowStyle}"><td style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:left;vertical-align:top;word-break:break-word;">${escapeHtml(displayRowProduct(row))}</td><td style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:right;white-space:nowrap;">${moneyCellToHtml(row.uvp)}</td><td style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:right;white-space:nowrap;${discountStyle}">${moneyCellToHtml(row.discount)}</td><td style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:right;white-space:nowrap;">${moneyCellToHtml(row.offer)}</td></tr>`;
   }).join('');
   const tableTitle = table.title || 'Position';
   const headingHtml = table.role === 'inventory_alternative' && table.title
@@ -47,8 +47,8 @@ function draftTableHtml(table, theme) {
     : '';
   return `
       ${headingHtml}
-      ${table.intro ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;margin:0 auto 16px auto;text-align:center;line-height:1.6;max-width:760px;">${escapeHtml(table.intro)}</p>` : ''}
-      <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.4;color:#000;width:100%;max-width:760px;box-sizing:border-box;margin:0 auto 22px auto;table-layout:fixed;">
+      ${table.intro ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;margin:0 auto 16px auto;text-align:center;line-height:1.55;max-width:680px;">${escapeHtml(table.intro)}</p>` : ''}
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.35;color:#000;width:100%;max-width:680px;box-sizing:border-box;margin:0 auto 22px auto;table-layout:fixed;">
         <thead>
           <tr style="background:${theme.offerTableHeaderBg};font-weight:bold;color:#000;">
             <th style="border:1px solid ${theme.borderColor};padding:8px 10px;box-sizing:border-box;text-align:left;width:40%;">${escapeHtml(tableTitle)}</th>
@@ -65,7 +65,7 @@ function draftTableHtml(table, theme) {
 function textBlockToHtml(text) {
   return String(text || '')
     .split(/\n{2,}/)
-    .map((part) => `<p style="font-family:Arial,sans-serif;font-size:14px;color:#000000;margin:0 auto 25px auto;text-align:left;line-height:1.5;box-sizing:border-box;">${escapeHtml(part).replace(/\n/g, '<br>')}</p>`)
+    .map((part) => `<p style="font-family:Arial,sans-serif;font-size:13px;color:#000000;margin:0 auto 25px auto;text-align:left;line-height:1.55;box-sizing:border-box;">${inlineTextToHtml(part).replace(/\n/g, '<br>')}</p>`)
     .join('');
 }
 
@@ -96,7 +96,21 @@ function entrepreneurHintToHtml(settings = {}) {
   const text = typeof configured === 'string' && configured.trim()
     ? configured.trim()
     : 'Hinweis fuer Unternehmer: Bei Vorsteuerabzug reduziert sich Ihre Nettobelastung um die ausgewiesene Mehrwertsteuer.';
-  return `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#555;max-width:760px;margin:12px auto 0 auto;line-height:1.6;text-align:left;">${escapeHtml(text)}</p>`;
+  return `<p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#555;max-width:680px;margin:12px auto 0 auto;line-height:1.6;text-align:left;">${escapeHtml(text)}</p>`;
+}
+
+function inlineTextToHtml(value) {
+  return escapeHtml(value).replace(
+    /(Rabatt:\s*)(&euro;|€)?\s*([0-9][0-9.\s]*,[0-9]{2})/g,
+    '$1<strong style="color:#c00000;font-weight:bold;">&euro; $3</strong>'
+  );
+}
+
+function moneyCellToHtml(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  const withoutEuro = text.replace(/^€\s*/, '').replace(/^&euro;\s*/i, '');
+  return `&euro;&nbsp;${escapeHtml(withoutEuro)}`;
 }
 
 function escapeHtml(value) {

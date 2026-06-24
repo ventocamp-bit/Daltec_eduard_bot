@@ -762,7 +762,7 @@ test('imap connect stores settings and disconnect removes credentials', async ()
 
 test('review draft html composer preserves n8n table styling and edited prices', () => {
   const html = buildEditedDraftHtml({
-    intro: 'Sehr geehrter Herr Test,\n\nvielen Dank.',
+    intro: 'Sehr geehrter Herr Test,\n\nvielen Dank. Rabatt: \u20ac 200,00.',
     tables: [{
       title: 'WUNSCH-KONFIGURATION',
       rows: [
@@ -777,15 +777,16 @@ test('review draft html composer preserves n8n table styling and edited prices',
   });
 
   assert.match(html, /Geänderter Hochlader/);
-  assert.match(html, /€ 2\.850,00/);
+  assert.match(html, /&euro;&nbsp;2\.850,00/);
+  assert.match(html, /Rabatt: <strong style="color:#c00000;font-weight:bold;">&euro; 200,00<\/strong>/);
   assert.match(html, /UVP Netto/);
   assert.match(html, /Rabatt/);
   assert.match(html, /Angebot Netto/);
   assert.doesNotMatch(html, /UVP brutto|Angebot brutto/);
   assert.match(html, /width:100%;box-sizing:border-box;text-align:center;background-color:#ffffff;padding:20px 0/);
-  assert.match(html, /max-width:760px;width:100%;box-sizing:border-box;margin:0 auto;text-align:left;overflow-wrap:break-word/);
+  assert.match(html, /max-width:680px;width:100%;box-sizing:border-box;margin:0 auto;text-align:left;overflow-wrap:break-word/);
   assert.match(html, /table role="presentation" cellspacing="0" cellpadding="0" border="0"/);
-  assert.match(html, /border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1\.4;color:#000;width:100%;max-width:760px;box-sizing:border-box;margin:0 auto 22px auto;table-layout:fixed/);
+  assert.match(html, /border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1\.35;color:#000;width:100%;max-width:680px;box-sizing:border-box;margin:0 auto 22px auto;table-layout:fixed/);
   assert.match(html, /box-sizing:border-box;text-align:left;vertical-align:top;word-break:break-word/);
   assert.match(html, /box-sizing:border-box;text-align:left;width:40%/);
   assert.match(html, /box-sizing:border-box;text-align:center;width:20%/);
@@ -795,7 +796,7 @@ test('review draft html composer preserves n8n table styling and edited prices',
   assert.match(html, /border:1px solid #222222/);
   assert.match(html, /20% Mehrwertsteuer/);
   assert.match(html, /color:#c00000;font-weight:bold/);
-  assert.match(html, /font-family:Arial,sans-serif;font-size:14px/);
+  assert.match(html, /font-family:Arial,sans-serif;font-size:13px/);
   assert.match(html, /Bearbeiteter Hinweis/);
   assert.match(html, /border:1px solid #d3d3d3;background:#fafafa;padding:18px 20px;box-sizing:border-box/);
 });
@@ -965,8 +966,8 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(stylesSource, /\.review-flags\.manual-correction/);
   assert.match(serverSource, /manual_correction_required/);
   assert.match(ownerSource, /Bitte kurz entscheiden/);
-  assert.match(ownerSource, /\['sendable', 'Sendbar - kann raus'\]/);
-  assert.match(ownerSource, /\['minor_correction', 'Korrektur nötig - bitte prüfen'\]/);
+  assert.match(ownerSource, /\['sendable', 'Sendbar'\]/);
+  assert.match(ownerSource, /\['minor_correction', 'Korrektur n\\u00f6tig'\]/);
   assert.doesNotMatch(ownerSource, /\['wrong', 'Falsch'\]/);
   assert.match(htmlSource, /id="inbound-status-list"/);
   assert.match(appSource, /const inboundStatusListEl = document\.querySelector\('#inbound-status-list'\)/);

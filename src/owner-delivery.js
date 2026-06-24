@@ -58,12 +58,12 @@ function wrapOwnerDraftWithFeedback(run, html, config, settings) {
   const secret = authConfig().sessionSecret;
   const tenantId = run.dealer_id || settings.dealer?.id || 'daltec-local';
   const links = [
-    ['sendable', 'Sendbar - kann raus'],
-    ['minor_correction', 'Korrektur nötig - bitte prüfen']
+    ['sendable', 'Sendbar'],
+    ['minor_correction', 'Korrektur n\u00f6tig']
   ].map(([rating, label]) => {
     const token = createFeedbackToken({ tenantId, runId: run.id, rating }, secret);
     const href = `${baseUrl}/feedback?token=${encodeURIComponent(token)}`;
-    return `<a href="${href}" style="display:inline-block;margin:0 12px 8px 0;padding:12px 16px;border-radius:6px;text-decoration:none;font-family:Arial,sans-serif;font-weight:bold;background:${rating === 'minor_correction' ? '#ffffff' : '#111827'};color:${rating === 'minor_correction' ? '#111827' : '#ffffff'};border:1px solid #d4dae3;">${escapeHtml(label)}</a>`;
+    return `<a href="${href}" style="display:inline-block;margin:0 12px 8px 0;padding:12px 18px;border-radius:6px;text-decoration:none;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;background:${rating === 'minor_correction' ? '#ffffff' : '#111827'};color:${rating === 'minor_correction' ? '#111827' : '#ffffff'};border:1px solid #d4dae3;">${escapeHtml(label)}</a>`;
   }).join('');
   const errorText = run.error_code
     ? `<p style="margin:0 0 10px 0;color:#92400e;font-family:Arial,sans-serif;font-size:13px;"><strong>Review-Grund:</strong> ${escapeHtml(run.error_code)} ${escapeHtml(run.error_message || '')}</p>`
@@ -71,7 +71,7 @@ function wrapOwnerDraftWithFeedback(run, html, config, settings) {
   return `
     <div style="border:1px solid #d4dae3;border-radius:8px;padding:16px;margin:0 0 24px 0;background:#f8fafc;">
       <p style="margin:0 0 8px 0;color:#111827;font-family:Arial,sans-serif;font-size:15px;"><strong>Bitte kurz entscheiden</strong></p>
-      <p style="margin:0 0 14px 0;color:#475467;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;">Wenn alles passt: <strong>Sendbar</strong>. Wenn Lukas noch etwas ändern soll: <strong>Korrektur nötig</strong>.</p>
+      <p style="margin:0 0 14px 0;color:#475467;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;">Wenn alles passt: <strong>Sendbar</strong>. Wenn Lukas noch etwas &auml;ndern soll: <strong>Korrektur n&ouml;tig</strong>.</p>
       ${errorText}
       ${links}
     </div>
