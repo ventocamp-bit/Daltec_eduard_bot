@@ -146,50 +146,49 @@ export async function processOfferRun(runId, context = {}) {
       : hasPriceReviewWarning
         ? pricingWarnings[0].message
         : (weakInventoryMatch ? 'Lager-Match ist schwach. Bitte manuell prüfen.' : (finalStatus === 'needs_review' ? 'Kein sicherer Lager-Match gefunden.' : null));
+    const pricingJson = result.matched?.kalkulation_anfrage || result.priced?.kalkulation_anfrage || {};
+    const matchJson = {
+      ...match,
+      upsell_daten: result.matched?.upsell_daten || [],
+      kalkulation_lager: result.matched?.kalkulation_lager || null,
+      inventory_source: {
+        type: 'local_csv',
+        path: inventoryPath,
+        rows_loaded: lagerBestand.length,
+        last_synced_at: inventoryMeta.modifiedAt,
+        age_hours: inventoryMeta.ageHours,
+        stale: inventoryMeta.stale,
+        max_age_hours: inventoryMeta.maxAgeHours
+      }
+    };
+    const summary = {
+      customerEmail: result.inquiry.kunde_email,
+      customerName: [result.inquiry.kunde_vorname, result.inquiry.kunde_nachname].filter(Boolean).join(' '),
+      lineItemCount: result.inquiry.line_items.length,
+      totalGross: pricingJson.gesamt_angebot_brutto || 0,
+      ...match,
+      editable_offer_version: 1
+    };
+    const draftSubject = result.offer?.betreff || '';
+    const editableState = buildEditableOfferState({
+      ...loaded,
+      draft_subject: draftSubject,
+      pricing_json: pricingJson,
+      match_json: matchJson,
+      summary
+    }, { editable_offer: editableOfferSeedFromSettings(settings) });
     await updateOfferRun(runId, {
       status: inventoryMeta.stale ? 'needs_review' : finalStatus,
       completed_at: new Date().toISOString(),
-      pricing_json: result.matched?.kalkulation_anfrage || result.priced?.kalkulation_anfrage || {},
-      match_json: {
-        ...match,
-        upsell_daten: result.matched?.upsell_daten || [],
-        kalkulation_lager: result.matched?.kalkulation_lager || null,
-        inventory_source: {
-          type: 'local_csv',
-          path: inventoryPath,
-          rows_loaded: lagerBestand.length,
-          last_synced_at: inventoryMeta.modifiedAt,
-          age_hours: inventoryMeta.ageHours,
-          stale: inventoryMeta.stale,
-          max_age_hours: inventoryMeta.maxAgeHours
-        }
-      },
-      draft_subject: result.offer?.betreff || '',
-      draft_html: renderEditableOfferHtml(buildEditableOfferState({
-        ...loaded,
-        draft_subject: result.offer?.betreff || '',
-        pricing_json: result.matched?.kalkulation_anfrage || result.priced?.kalkulation_anfrage || {},
-        match_json: {
-          ...match,
-          upsell_daten: result.matched?.upsell_daten || [],
-          kalkulation_lager: result.matched?.kalkulation_lager || null
-        },
-        summary: {
-          customerEmail: result.inquiry.kunde_email,
-          customerName: [result.inquiry.kunde_vorname, result.inquiry.kunde_nachname].filter(Boolean).join(' '),
-          lineItemCount: result.inquiry.line_items.length,
-          totalGross: result.matched?.kalkulation_anfrage?.gesamt_angebot_brutto || 0,
-          ...match
-        }
-      })),
+      pricing_json: pricingJson,
+      match_json: matchJson,
+      draft_subject: draftSubject,
+      draft_html: renderEditableOfferHtml(editableState),
       error_code: errorCode,
       error_message: errorMessage,
       summary: {
-        customerEmail: result.inquiry.kunde_email,
-        customerName: [result.inquiry.kunde_vorname, result.inquiry.kunde_nachname].filter(Boolean).join(' '),
-        lineItemCount: result.inquiry.line_items.length,
-        totalGross: result.matched?.kalkulation_anfrage?.gesamt_angebot_brutto || 0,
-        ...match
+        ...summary,
+        editable_offer: editableState.editable_offer
       }
     }, context);
     await appendOfferRunEvent(runId, {
@@ -204,6 +203,19 @@ export async function processOfferRun(runId, context = {}) {
 
   return loadOfferRun(runId, context);
 }
+
+function editableOfferSeedFromSettings(settings = {}) {
+  const defaults = settings.mail_defaults || {};
+  const seed = {};
+  if (typeof defaults.introTemplate === 'string') seed.intro = defaults.introTemplate;
+  if (typeof defaults.defaultNotes === 'string') seed.notes = defaults.defaultNotes;
+  if (typeof defaults.signature === 'string') seed.signature = defaults.signature;
+  if (typeof defaults.showInventoryAlternativeDefault === 'boolean') {
+    seed.inventory_alternative = { enabled: defaults.showInventoryAlternativeDefault };
+  }
+  return seed;
+}
+
 export async function setOfferRunStatus(runId, status, payload = {}, context = {}) {
   const run = await loadOfferRun(runId, context);
   if (!run) {

@@ -705,9 +705,10 @@ export function createAdminApp(options = {}) {
       res.status(404).json({ ok: false, error: 'run_not_found' });
       return;
     }
+    const settings = await loadSettings(req.tenantContext);
     res.json({
       ok: true,
-      ...buildReviewStateForRun(run)
+      ...buildReviewStateForRun(run, editableOfferStateWithContentDefaults(run, {}, settings))
     });
   } catch (error) {
     next(error);
@@ -791,7 +792,8 @@ export function createAdminApp(options = {}) {
       return;
     }
     const draft = normalizeCustomerSendPayload(req.body || {});
-    const rendered = renderEditableOfferForRun(run, draft.editable_offer);
+    const settings = await loadSettings(req.tenantContext);
+    const rendered = renderEditableOfferForRun(run, draft.editable_offer, settings);
     const finalHtml = rendered.html;
     claimedRun = await claimOfferRunForCustomerSend(run.id, {
       to: draft.to,
@@ -859,7 +861,8 @@ export function createAdminApp(options = {}) {
         res.status(404).json({ ok: false, error: 'run_not_found' });
         return;
       }
-      const rendered = renderEditableOfferForRun(run, req.body?.editable_offer || req.body || {});
+      const settings = await loadSettings(req.tenantContext);
+      const rendered = renderEditableOfferForRun(run, req.body?.editable_offer || req.body || {}, settings);
       res.json({
         ok: true,
         html: rendered.html,
@@ -1686,8 +1689,8 @@ function isFinalOfferRun(run = {}) {
   return ['sent_to_customer', 'rejected'].includes(run.status);
 }
 
-function renderEditableOfferForRun(run, editableOfferInput = {}) {
-  const state = buildEditableOfferState(run, { editable_offer: editableOfferInput });
+function renderEditableOfferForRun(run, editableOfferInput = {}, settings = {}) {
+  const state = editableOfferStateWithContentDefaults(run, editableOfferInput, settings);
   const inventory = state.tables.inventory_alternative;
   return {
     html: renderEditableOfferHtml(state),
@@ -1699,6 +1702,84 @@ function renderEditableOfferForRun(run, editableOfferInput = {}) {
       inventoryHeading: inventory.enabled ? inventory.heading || null : null
     }
   };
+}
+
+function editableOfferStateWithContentDefaults(run, editableOfferInput = {}, settings = {}) {
+  return buildEditableOfferState(run, {
+    editable_offer: editableOfferInputWithContentDefaults(run, editableOfferInput, settings)
+  });
+}
+
+function editableOfferInputWithContentDefaults(run = {}, editableOfferInput = {}, settings = {}) {
+  const input = editableOfferInput && typeof editableOfferInput === 'object' ? editableOfferInput : {};
+  const persisted = run.summary?.editable_offer || {};
+  const defaults = editableContentDefaults(run, settings);
+  const result = { ...input };
+  for (const field of ['intro', 'notes', 'signature']) {
+    if (!hasText(input[field]) && !hasText(persisted[field]) && hasText(defaults[field])) {
+      result[field] = defaults[field];
+    }
+  }
+  return result;
+}
+
+function editableContentDefaults(run = {}, settings = {}) {
+  const draftHtml = run.draft?.html_body || '';
+  return {
+    intro: firstParagraphBeforeTable(draftHtml) || settings.mail_defaults?.introTemplate || '',
+    notes: settings.mail?.copyQuestion || settings.mail_defaults?.defaultNotes || '',
+    signature: signatureTextFromSettings(settings) || settings.mail_defaults?.signature || ''
+  };
+}
+
+function firstParagraphBeforeTable(html = '') {
+  const beforeTable = String(html || '').split(/<table\b/i)[0] || '';
+  const paragraphs = [...beforeTable.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((match) => textFromHtml(match[1]))
+    .filter(Boolean)
+    .filter((text) => !/^Kunden E-Mail kopieren:/i.test(text));
+  return paragraphs.at(-1) || '';
+}
+
+function signatureTextFromSettings(settings = {}) {
+  const signature = settings.signature || {};
+  const lines = [
+    signature.greeting || 'Beste Grüße',
+    '',
+    signature.name,
+    signature.company,
+    signature.address1,
+    signature.address2,
+    signature.phone,
+    signature.email,
+    signature.website
+  ].map((line) => String(line || '').trim());
+  return lines.some(Boolean) ? lines.join('\n').replace(/\n{3,}/g, '\n\n').trim() : '';
+}
+
+function textFromHtml(html = '') {
+  return decodeHtmlEntities(String(html || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim());
+}
+
+function decodeHtmlEntities(value = '') {
+  return String(value || '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&euro;/g, '€')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function hasText(value) {
+  return String(value || '').trim().length > 0;
 }
 
 function buildReviewStateForRun(run, state = buildEditableOfferState(run, { editable_offer: run.summary?.editable_offer || {} })) {
