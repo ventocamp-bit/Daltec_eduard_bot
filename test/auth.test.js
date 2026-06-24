@@ -531,12 +531,15 @@ test('imap connect stores settings and disconnect removes credentials', async ()
 test('review draft html composer preserves n8n table styling and edited prices', () => {
   const html = buildEditedDraftHtml({
     intro: 'Sehr geehrter Herr Test,\n\nvielen Dank.',
-    rows: [
+    tables: [{
+      title: 'WUNSCH-KONFIGURATION',
+      rows: [
       { product: 'Geänderter Hochlader', uvp: '€ 2.720,83', discount: '€ 345,83', offer: '€ 2.375,00' },
       { product: 'Gesamt netto', uvp: '€ 2.720,83', discount: '€ 345,83', offer: '€ 2.375,00', type: 'total' },
       { product: '20% Mehrwertsteuer', uvp: '€ 544,17', discount: '€ 69,17', offer: '€ 475,00', type: 'vat' },
       { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '€ 3.265,00', discount: '€ 415,00', offer: '€ 2.850,00', type: 'gross' }
-    ],
+      ]
+    }],
     notes: 'Bearbeiteter Hinweis',
     signature: 'Beste Grüße\nLukas'
   });
@@ -547,14 +550,22 @@ test('review draft html composer preserves n8n table styling and edited prices',
   assert.match(html, /Rabatt/);
   assert.match(html, /Angebot Netto/);
   assert.doesNotMatch(html, /UVP brutto|Angebot brutto/);
-  assert.match(html, /border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;color:#000;width:100%/);
+  assert.match(html, /width:100%;box-sizing:border-box;text-align:center;background-color:#ffffff;padding:20px 12px/);
+  assert.match(html, /max-width:800px;width:100%;box-sizing:border-box;margin:0 auto;text-align:left;overflow-wrap:break-word/);
+  assert.match(html, /font-size:18px;line-height:1\.2;text-align:center/);
+  assert.match(html, /border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;line-height:1\.4;color:#000;width:100%;max-width:680px;box-sizing:border-box;margin:0 auto 24px auto;table-layout:fixed/);
+  assert.match(html, /box-sizing:border-box;word-break:break-word/);
+  assert.match(html, /box-sizing:border-box;text-align:left;width:37%/);
+  assert.match(html, /box-sizing:border-box;text-align:right;width:21%/);
+  assert.match(html, /box-sizing:border-box;text-align:right;width:20%/);
+  assert.match(html, /box-sizing:border-box;text-align:right;width:22%/);
   assert.match(html, /background:#FFC000;font-weight:bold;color:#000/);
   assert.match(html, /border:1px solid #000/);
   assert.match(html, /background:#f9f9f9;font-weight:bold;border-top:2px solid #000/);
   assert.match(html, /color:#c00000;font-weight:bold/);
   assert.match(html, /font-family:Arial,sans-serif;font-size:14px/);
   assert.match(html, /Bearbeiteter Hinweis/);
-  assert.match(html, /border:1px solid #ccc;background:#f9f9f9;padding:20px/);
+  assert.match(html, /border:1px solid #ccc;background:#f9f9f9;padding:20px;box-sizing:border-box/);
 });
 
 test('review draft html composer never renders NaN for empty price fields', () => {
