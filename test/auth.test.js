@@ -610,7 +610,7 @@ test('review UI source contains prefilled fields spinner and success state hooks
   assert.match(appSource, /previewFrame\.srcdoc = result\.html/);
   assert.match(appSource, /\/render-editable-offer/);
   assert.match(serverSource, /app\.get\('\/api\/offer-runs\/:id\/review-state'/);
-  assert.match(serverSource, /buildReviewStateForRun\(run\)/);
+  assert.match(serverSource, /buildReviewStateForRun\(run, editableOfferStateWithContentDefaults\(run, \{\}, settings\)\)/);
   assert.match(appSource, /editableOfferRenderSequence/);
   assert.match(appSource, /request\(`\/api\/offer-runs\/\$\{encodeURIComponent\(runId\)\}\/send-to-customer`/);
   assert.match(htmlSource, /id="inbound-status-list"/);
