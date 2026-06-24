@@ -1,15 +1,17 @@
 export function buildEditedDraftHtml({ intro = '', rows = [], tables = null, notes = '', signature = '', settings = {} }) {
   const draftTables = normalizeDraftTables(tables, rows);
   const theme = normalizeOfferTheme(settings.theme || {});
+  const hasInventoryAlternative = draftTables.some((table) => table.role === 'inventory_alternative');
   const tablesHtml = draftTables.map((table) => draftTableHtml(table, theme)).join('');
-  const entrepreneurHintHtml = entrepreneurHintToHtml(settings);
+  const entrepreneurHintHtml = hasInventoryAlternative ? '' : entrepreneurHintToHtml(settings);
+  const notesHtml = notesBlockToHtml(notes, { hasInventoryAlternative });
   return `
     <div style="width:100%;box-sizing:border-box;text-align:center;background-color:#ffffff;padding:20px 0;">
       <div style="max-width:680px;width:100%;box-sizing:border-box;margin:0 auto;text-align:left;overflow-wrap:break-word;">
         ${textBlockToHtml(intro)}
         ${tablesHtml}
         ${entrepreneurHintHtml}
-        ${notesBlockToHtml(notes)}
+        ${notesHtml}
         ${textBlockToHtml(signature)}
       </div>
     </div>
@@ -22,6 +24,7 @@ function normalizeDraftTables(tables, rows) {
       role: table.role || '',
       title: table.title || '',
       intro: table.intro || '',
+      stockNoticeHtml: table.stockNoticeHtml || '',
       rows: Array.isArray(table.rows) ? table.rows : []
     }));
   }
@@ -45,9 +48,16 @@ function draftTableHtml(table, theme) {
   const headingHtml = table.role === 'inventory_alternative' && table.title
     ? `<div style="font-family:Arial,Helvetica,sans-serif;font-size:28px;line-height:1.2;font-weight:bold;text-align:center;color:#111;margin:28px auto 14px auto;">${escapeHtml(table.title)}</div>`
     : '';
+  const stockNoticeHtml = table.role === 'inventory_alternative' && table.stockNoticeHtml
+    ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;margin:0 auto 14px auto;text-align:center;line-height:1.55;max-width:680px;">${sanitizeInlineHtml(table.stockNoticeHtml)}</p>`
+    : '';
+  const introHtml = table.intro
+    ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;margin:0 auto 16px auto;text-align:center;line-height:1.55;max-width:680px;${table.role === 'inventory_alternative' ? 'font-weight:bold;text-transform:uppercase;' : ''}">${escapeHtml(displayTableIntro(table))}</p>`
+    : '';
   return `
       ${headingHtml}
-      ${table.intro ? `<p style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;margin:0 auto 16px auto;text-align:center;line-height:1.55;max-width:680px;">${escapeHtml(table.intro)}</p>` : ''}
+      ${stockNoticeHtml}
+      ${introHtml}
       <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.35;color:#000;width:100%;max-width:680px;box-sizing:border-box;margin:0 auto 22px auto;table-layout:fixed;">
         <thead>
           <tr style="background:${theme.offerTableHeaderBg};font-weight:bold;color:#000;">
@@ -69,8 +79,9 @@ function textBlockToHtml(text) {
     .join('');
 }
 
-function notesBlockToHtml(text) {
+function notesBlockToHtml(text, options = {}) {
   if (!String(text || '').trim()) return '';
+  if (options.hasInventoryAlternative && isGenericQuestionNote(text)) return '';
   return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#000000;margin:12px auto 25px auto;text-align:left;line-height:1.5;border:1px solid #d3d3d3;background:#fafafa;padding:18px 20px;box-sizing:border-box;">${escapeHtml(text).replace(/\n/g, '<br>')}</div>`;
 }
 
@@ -88,6 +99,11 @@ function normalizeOfferTheme(theme = {}) {
 function displayRowProduct(row = {}) {
   if (row.type === 'vat') return '20% Mehrwertsteuer';
   return row.product || '';
+}
+
+function displayTableIntro(table = {}) {
+  if (table.role !== 'inventory_alternative') return table.intro || '';
+  return String(table.intro || '').replace(/^Passendes Lagerfahrzeug:\s*/i, '').trim();
 }
 
 function entrepreneurHintToHtml(settings = {}) {
@@ -111,6 +127,18 @@ function moneyCellToHtml(value) {
   if (!text) return '';
   const withoutEuro = text.replace(/^€\s*/, '').replace(/^&euro;\s*/i, '');
   return `&euro;&nbsp;${escapeHtml(withoutEuro)}`;
+}
+
+function sanitizeInlineHtml(value) {
+  return escapeHtml(value)
+    .replace(/&lt;br\s*\/?&gt;/gi, '<br>')
+    .replace(/&lt;strong&gt;/gi, '<strong>')
+    .replace(/&lt;\/strong&gt;/gi, '</strong>')
+    .replace(/&amp;amp;/g, '&amp;');
+}
+
+function isGenericQuestionNote(value) {
+  return /^bei fragen stehe ich ihnen jederzeit zur verf(ü|ue)gung\.?$/i.test(String(value || '').trim());
 }
 
 function escapeHtml(value) {

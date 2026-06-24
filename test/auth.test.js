@@ -881,6 +881,39 @@ test('review preview with upsell renders two pricing tables from same mail html 
   assert.match(html, /background:#F2B400;font-weight:bold;color:#000/);
 });
 
+test('inventory alternative renders stock notice above table and suppresses generic lower question box', () => {
+  const html = buildEditedDraftHtml({
+    intro: 'Sehr geehrte Damen und Herren',
+    tables: [
+      {
+        title: 'WUNSCH-KONFIGURATION',
+        rows: [
+          { product: 'Wunsch Hochlader', uvp: '2000,00', discount: '100,00', offer: '1900,00' },
+          { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '2400,00', discount: '120,00', offer: '2280,00', type: 'gross' }
+        ]
+      },
+      {
+        role: 'inventory_alternative',
+        title: 'SOFORT AB LAGER VERF\u00dcGBAR',
+        intro: 'Passendes Lagerfahrzeug: Hochlader 256x150x30 750kg H=63cm',
+        stockNoticeHtml: 'Alternativ steht dieses sehr \u00e4hnliche Fahrzeug sofort auf unserem Hof in Harmannsdorf bereit inklusive COC &amp; Typisierung:<br><strong>F\u00fcr Zubeh\u00f6r zum lagernden Basis-Fahrzeug kontaktieren Sie uns bitte per E-Mail oder telefonisch.</strong>',
+        rows: [
+          { product: 'Hochlader 256x150x30 750kg H=63cm', uvp: '1475,00', discount: '166,67', offer: '1308,33' },
+          { product: 'Gesamt Brutto (inkl. MwSt.)', uvp: '1770,00', discount: '200,00', offer: '1570,00', type: 'gross' }
+        ]
+      }
+    ],
+    notes: 'Bei Fragen stehe ich Ihnen jederzeit zur Verf\u00fcgung.'
+  });
+
+  assert.match(html, /Alternativ steht dieses sehr/);
+  assert.match(html, /F\u00fcr Zubeh\u00f6r zum lagernden Basis-Fahrzeug/);
+  assert.ok(html.indexOf('Alternativ steht dieses sehr') < html.indexOf('Hochlader 256x150x30 750kg H=63cm'));
+  assert.doesNotMatch(html, /Passendes Lagerfahrzeug:/);
+  assert.doesNotMatch(html, /Bei Fragen stehe ich Ihnen jederzeit/);
+  assert.doesNotMatch(html, /Hinweis fuer Unternehmer/);
+});
+
 test('review UI source contains prefilled fields spinner and success state hooks', async () => {
   const serverSource = await fs.readFile(path.join('src', 'admin', 'server.js'), 'utf8');
   const appSource = await fs.readFile(path.join('src', 'admin', 'public', 'app.js'), 'utf8');

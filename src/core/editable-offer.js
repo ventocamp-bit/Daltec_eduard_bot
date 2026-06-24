@@ -1,4 +1,5 @@
 import { buildEditedDraftHtml } from '../admin/public/draft-review.js';
+import { TRANSLATIONS } from './email-template.js';
 import { findEduardProductByCode } from './product-catalog.js';
 
 const INVENTORY_HEADING = 'SOFORT AB LAGER VERFÜGBAR';
@@ -95,7 +96,7 @@ function mergeEditableOffer(base, override) {
 export function renderEditableOfferHtml(state, settings = {}) {
   const tables = [state.tables.requested];
   if (state.tables.inventory_alternative.enabled && state.tables.inventory_alternative.table) {
-    tables.push(state.tables.inventory_alternative.table);
+    tables.push(inventoryTableWithStockNotice(state.tables.inventory_alternative.table, settings));
   }
   return buildEditedDraftHtml({
     intro: state.content.intro,
@@ -104,6 +105,14 @@ export function renderEditableOfferHtml(state, settings = {}) {
     signature: state.content.signature,
     settings
   });
+}
+
+function inventoryTableWithStockNotice(table, settings = {}) {
+  const location = settings.dealer?.locationName || 'Harmannsdorf';
+  return {
+    ...table,
+    stockNoticeHtml: TRANSLATIONS.de.alternativeStockText(location)
+  };
 }
 
 export function checkEditableOfferConsistency(run, overrides = {}) {
