@@ -26,8 +26,14 @@ export async function deliverRunDraftToOwner(run, settings, context = {}) {
   };
   const runtime = await createMailRuntime(effectiveConfig, context);
   const to = settings.mail?.to || config.gmail.to;
-  const subject = settings.mail?.subject || config.gmail.subject;
-  const html = wrapOwnerDraftWithFeedback(run, run.draft?.html_body || run.draft_html, config, settings);
+  const customerEmail = run.draft?.customer_email || run.summary?.customerEmail || run.customer_json?.email || '';
+  const customerName = run.summary?.customerName || [run.customer_json?.first_name, run.customer_json?.last_name].filter(Boolean).join(' ');
+  const subjectParts = ['[Review] Eduard'];
+  if (customerName) subjectParts.push(customerName);
+  if (customerEmail) subjectParts.push(customerEmail);
+  const subject = subjectParts.join(' – ');
+  
+  const html = wrapOwnerDraftWithFeedback(run, run.draft?.html_body || run.draft_html, config, settings, customerEmail);
 
   await runtime.sendHtmlMail(runtime.client, {
     to,
@@ -52,7 +58,7 @@ export async function deliverRunDraftToOwner(run, settings, context = {}) {
   return { delivered: true, provider: runtime.provider, to };
 }
 
-function wrapOwnerDraftWithFeedback(run, html, config, settings) {
+function wrapOwnerDraftWithFeedback(run, html, config, settings, customerEmail) {
   const baseUrl = String(config.app?.baseUrl || '').replace(/\/$/, '');
   if (!baseUrl) return html;
   const secret = authConfig().sessionSecret;
@@ -68,12 +74,19 @@ function wrapOwnerDraftWithFeedback(run, html, config, settings) {
   const errorText = run.error_code
     ? `<p style="margin:0 0 10px 0;color:#92400e;font-family:Arial,sans-serif;font-size:13px;"><strong>Review-Grund:</strong> ${escapeHtml(run.error_code)} ${escapeHtml(run.error_message || '')}</p>`
     : '';
+
+  const displayEmail = customerEmail || 'keine@email.com';
+
   return `
     <div style="border:1px solid #d4dae3;border-radius:8px;padding:16px;margin:0 0 24px 0;background:#f8fafc;">
       <p style="margin:0 0 8px 0;color:#111827;font-family:Arial,sans-serif;font-size:15px;"><strong>Bitte kurz entscheiden</strong></p>
       <p style="margin:0 0 14px 0;color:#475467;font-family:Arial,sans-serif;font-size:13px;line-height:1.5;">Wenn alles passt: <strong>Sendbar</strong>. Wenn Lukas noch etwas &auml;ndern soll: <strong>Korrektur n&ouml;tig</strong>.</p>
       ${errorText}
       ${links}
+    </div>
+    <div style='max-width:680px;margin:0 auto 20px auto;text-align:left;font-family:Arial,sans-serif;font-size:13px;color:#444;border:1px solid #ccc;background-color:#f4f4f4;padding:10px;border-radius:4px;'>
+      <strong>Kunden E-Mail kopieren:</strong><br>
+      <span style='user-select:all;-webkit-user-select:all;display:inline-block;background:#fff;padding:4px 8px;margin-top:5px;border:1px solid #bbb;border-radius:3px;cursor:pointer;color:#000;font-weight:bold;'>${escapeHtml(displayEmail)}</span>
     </div>
     ${html}
   `;

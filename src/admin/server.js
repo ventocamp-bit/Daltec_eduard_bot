@@ -35,10 +35,7 @@ import {
 } from '../core/editable-offer.js';
 import { listInventoryImports } from '../inventory-import.js';
 import { processMailMessage } from '../index.js';
-import {
-  buildReviewQueue as buildSharedReviewQueue,
-  sendReviewQueueDigest as sendSharedReviewQueueDigest
-} from '../review-digest.js';
+
 import {
   appendOfferRunEvent,
   claimOfferRunForCustomerSend,
@@ -647,25 +644,7 @@ export function createAdminApp(options = {}) {
   }
   });
 
-  app.get('/api/review-queue', async (req, res, next) => {
-  try {
-    res.json(await buildSharedReviewQueue(req.tenantContext));
-  } catch (error) {
-    next(error);
-  }
-  });
 
-  app.post('/api/review-queue/digest', async (req, res, next) => {
-  try {
-    res.json(await sendSharedReviewQueueDigest(req.tenantContext, {
-      dryRun: req.query.dryRun === '1' || req.body?.dryRun === true,
-      limit: Number(req.body?.limit || req.query.limit || 20),
-      auth
-    }));
-  } catch (error) {
-    next(error);
-  }
-  });
 
   app.post('/api/inbound/email', async (req, res, next) => {
   try {

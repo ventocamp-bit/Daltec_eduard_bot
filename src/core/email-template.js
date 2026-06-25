@@ -367,10 +367,7 @@ export function buildOfferEmail(context, settings = {}) {
 
   const html = `
     <div style='width:100%;text-align:center;background-color:#ffffff;padding:20px 0;'>
-      <div style='max-width:800px;margin:0 auto 20px auto;text-align:left;font-family:Arial,sans-serif;font-size:13px;color:#444;border:1px solid #ccc;background-color:#f4f4f4;padding:10px;border-radius:4px;'>
-        <strong>Kunden E-Mail kopieren:</strong><br>
-        <span style='user-select:all;-webkit-user-select:all;display:inline-block;background:#fff;padding:4px 8px;margin-top:5px;border:1px solid #bbb;border-radius:3px;cursor:pointer;color:#000;font-weight:bold;'>${kundenEmail}</span>
-      </div>
+
       <p style='font-family:Arial,sans-serif;font-size:14px;color:${colors.textColor};max-width:800px;margin:0 auto 25px auto;text-align:left;line-height:1.5;'>
         ${salutation(context, t)},<br><br>
         ${introText} ${copyQuestion}

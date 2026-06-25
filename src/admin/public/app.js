@@ -68,8 +68,14 @@ outlookConnectEl.addEventListener('click', preventDisabledLink);
 manualIngestButton.addEventListener('click', manualIngest);
 addProductGroupButton.addEventListener('click', addProductGroup);
 addPriceRuleButton.addEventListener('click', addPriceRule);
-runListEl.addEventListener('click', openRunFromList);
-inboundStatusListEl.addEventListener('click', openRunFromList);
+  runListEl.addEventListener('click', (e) => {
+    handleRetryClick(e);
+    openRunFromList(e);
+  });
+  inboundStatusListEl.addEventListener('click', (e) => {
+    handleRetryClick(e);
+    openRunFromList(e);
+  });
 monitoringAlertsEl.addEventListener('click', openRunFromList);
 saasBlockersEl.addEventListener('click', openRunFromList);
 reviewListEl.addEventListener('click', handleReviewQueueClick);
@@ -671,6 +677,34 @@ async function handleReviewQueueClick(event) {
   if (openButton) await renderRunDetail(openButton.dataset.runId);
 }
 
+async function handleRetryClick(event) {
+  const retryBtn = event.target.closest('[data-retry-run]');
+  if (!retryBtn) return;
+  
+  event.stopPropagation();
+  retryBtn.disabled = true;
+  const originalText = retryBtn.textContent;
+  retryBtn.textContent = 'Sende...';
+  
+  try {
+    const res = await request(`/api/offer-runs/${encodeURIComponent(retryBtn.dataset.retryRun)}/retry`, { method: 'POST' });
+    retryBtn.textContent = 'Erfolg';
+    retryBtn.classList.replace('secondary', 'success');
+    setTimeout(() => {
+      refreshRuns();
+      refreshInboundStatus();
+    }, 1500);
+  } catch (err) {
+    retryBtn.textContent = 'Fehler';
+    retryBtn.classList.add('danger');
+    setTimeout(() => {
+      retryBtn.disabled = false;
+      retryBtn.textContent = originalText;
+      retryBtn.classList.remove('danger');
+    }, 3000);
+  }
+}
+
 async function sendReviewDigest() {
   sendReviewDigestButton.disabled = true;
   setStatus('Sende Review Digest...');
@@ -751,13 +785,16 @@ async function refreshRuns() {
   runCountEl.textContent = String(runs.length);
   runListEl.innerHTML = runs.length
     ? runs.slice(0, 8).map((run) => `
-      <button type="button" class="offer-item run-item" data-run-id="${escapeHtml(run.id)}">
-        <div class="offer-main">
+      <div class="offer-item run-item">
+        <div class="offer-main" data-run-id="${escapeHtml(run.id)}" style="cursor:pointer;flex:1;">
           <strong>${escapeHtml(run.summary?.customerName || run.summary?.customerEmail || run.inbound_message_id || 'Run')}</strong>
           <small>${escapeHtml(run.error_message || run.summary?.topInventoryName || run.id)}</small>
         </div>
-        <span class="run-status ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>
-      </button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="run-status ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>
+          ${run.status === 'needs_review' ? `<button type="button" class="secondary" data-retry-run="${escapeHtml(run.id)}" style="padding:4px 8px;font-size:12px;">Neu senden</button>` : ''}
+        </div>
+      </div>
     `).join('')
     : '<div class="status">Noch keine Verarbeitungen</div>';
 }

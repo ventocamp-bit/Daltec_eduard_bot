@@ -11,7 +11,7 @@ import { createMailRuntime } from './mail-runtime.js';
 import { loadMailConnections } from './mail-connections.js';
 import { fetchUnseenImapMessages } from './core/imap-poller.js';
 import { deliverRunDraftToOwner } from './owner-delivery.js';
-import { sendReviewReminderIfDue } from './review-digest.js';
+
 import { resolveTenantContextForInbound } from './dealer-routing.js';
 import { isInternalOwnerDraft } from './internal-mail.js';
 import { labelForIgnoredRun, labelForProcessedRun } from './mail-labels.js';
@@ -291,12 +291,6 @@ function sanitizePollError(message, imap = {}) {
 async function runOnceSafely() {
   try {
     await runOnce();
-    const reminder = await sendReviewReminderIfDue(defaultTenantContext);
-    if (reminder.delivered) {
-      console.log(`[review] Digest reminder sent: ${reminder.count}`);
-    } else if (!['disabled', 'cooldown', 'empty_or_below_minimum'].includes(reminder.reason)) {
-      console.log(`[review] Digest reminder skipped: ${reminder.reason}`);
-    }
   } catch (error) {
     console.error(`[poll] ${error.message}`);
   }
