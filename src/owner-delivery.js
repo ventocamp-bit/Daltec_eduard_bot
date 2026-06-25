@@ -33,7 +33,8 @@ export async function deliverRunDraftToOwner(run, settings, context = {}) {
   if (customerEmail) subjectParts.push(customerEmail);
   const subject = subjectParts.join(' – ');
   
-  const html = wrapOwnerDraftWithFeedback(run, run.draft?.html_body || run.draft_html, config, settings, customerEmail);
+  const cleanHtml = buildCleanReviewTable(run);
+  const html = wrapOwnerDraftWithFeedback(run, cleanHtml, config, settings, customerEmail);
 
   await runtime.sendHtmlMail(runtime.client, {
     to,
@@ -89,6 +90,46 @@ function wrapOwnerDraftWithFeedback(run, html, config, settings, customerEmail) 
       <span style='user-select:all;-webkit-user-select:all;display:inline-block;background:#fff;padding:4px 8px;margin-top:5px;border:1px solid #bbb;border-radius:3px;cursor:pointer;color:#000;font-weight:bold;'>${escapeHtml(displayEmail)}</span>
     </div>
     ${html}
+  `;
+}
+
+function buildCleanReviewTable(run) {
+  const items = Array.isArray(run.line_items_json) ? run.line_items_json : [];
+  if (!items.length) {
+    return `<p style="font-family:Arial,sans-serif;font-size:13px;color:#444;text-align:center;">Keine Artikeldaten verf&uuml;gbar.</p>`;
+  }
+
+  const rowsHtml = items.map(item => {
+    const name = escapeHtml(item.produkt_name_original || item.name || 'Position');
+    const net = Number(item.angebot_netto || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return `
+      <tr>
+        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;">${name}</td>
+        <td style="padding:10px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${net} &euro;</td>
+      </tr>
+    `;
+  }).join('');
+
+  const total = Number(run.pricing_json?.gesamt_angebot_brutto || run.summary?.totalGross || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return `
+    <table style="width:100%;max-width:680px;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;color:#111827;margin:0 auto;">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:10px 8px;border-bottom:2px solid #d1d5db;background:#f9fafb;">Produkt</th>
+          <th style="text-align:right;padding:10px 8px;border-bottom:2px solid #d1d5db;background:#f9fafb;">Netto</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td style="padding:12px 8px;font-weight:bold;text-align:right;border-top:2px solid #d1d5db;">Gesamt (Brutto):</td>
+          <td style="padding:12px 8px;font-weight:bold;text-align:right;border-top:2px solid #d1d5db;">${total} &euro;</td>
+        </tr>
+      </tfoot>
+    </table>
   `;
 }
 

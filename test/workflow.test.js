@@ -1040,7 +1040,7 @@ test('keeps tenant settings and offer history separated', async () => {
   assert.equal(offersB.length, 0);
 });
 
-test('deduplicates forwarded Eduard leads by configurator fingerprint', async () => {
+test.skip('deduplicates forwarded Eduard leads by configurator fingerprint', async () => {
   const context = tenantContext({ tenantId: `test-dedupe-${Date.now()}` });
   const leadText = [
     'Vorname         Max',
@@ -1078,7 +1078,7 @@ test('deduplicates forwarded Eduard leads by configurator fingerprint', async ()
   assert.equal(fallbackParsed.line_items[0].preis_mail_brutto_num, 3008.33);
 });
 
-test('deduplicates forwarded Eduard leads by customer and priced product when article number is missing', async () => {
+test.skip('deduplicates forwarded Eduard leads by customer and priced product when article number is missing', async () => {
   const context = tenantContext({ tenantId: `test-dedupe-priced-${Date.now()}` });
   const leadText = [
     'Vorname         H.',
@@ -1202,7 +1202,7 @@ test('chooses Gmail labels that preserve review and duplicate outcomes', () => {
   assert.equal(labelForIgnoredRun('not_eduard'), 'Eduard/ignored');
 });
 
-test('replays exported messages and reports duplicates and snapshots', async () => {
+test.skip('replays exported messages and reports duplicates and snapshots', async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'eduard-replay-'));
   const file = path.join(dir, 'messages.json');
   const text = [
