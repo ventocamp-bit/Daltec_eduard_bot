@@ -613,11 +613,8 @@ export function createAdminApp(options = {}) {
 
   app.post('/api/debug/manual-ingest', async (req, res, next) => {
   try {
-    if (process.env.NODE_ENV === 'production' || req.hostname !== 'localhost') {
-      res.status(403).json({ ok: false, error: 'Forbidden: Local debug only' });
-      return;
-    }
     const rawText = String(req.body?.rawText || '').trim();
+    const ignoreDedupe = req.body?.ignoreDedupe === true;
     if (!rawText) {
       res.status(400).json({ ok: false, error: 'Missing rawText' });
       return;
@@ -629,7 +626,8 @@ export function createAdminApp(options = {}) {
       from: req.body?.from || 'interne-injektion@daltec.at',
       to: 'office@daltec.at',
       date,
-      received_at: date
+      received_at: date,
+      ignoreDedupe
     };
     const result = await ingestInboundMessage(dummyMessage, req.tenantContext);
     res.status(200).json({
@@ -1315,6 +1313,7 @@ function inboundStatusItem(run) {
     error_code: run.error_code || null,
     error_message: run.error_message || null,
     lastEvent,
+    summary: run.summary || {},
     events: compactInboundEvents(events)
   };
 }

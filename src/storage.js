@@ -107,10 +107,11 @@ export async function ingestInboundMessage(input, context = {}) {
   const idempotencyKey = input.idempotency_key || buildIdempotencyKey(paths.tenantId, input);
   const leadFingerprint = buildLeadFingerprint(paths.tenantId, input);
   const inboundMessages = await readJsonl(inboundPath);
-  const existingMessage = inboundMessages.find((message) =>
-    message.idempotency_key === idempotencyKey ||
-    (leadFingerprint && message.lead_fingerprint === leadFingerprint)
-  );
+  
+  let existingMessage;
+  if (!input.ignoreDedupe) {
+    existingMessage = inboundMessages.find((message) => message.idempotency_key === idempotencyKey);
+  }
 
   if (existingMessage) {
     const existingRun = (await listOfferRuns(1000, paths)).find((run) => run.inbound_message_id === existingMessage.id);
@@ -118,11 +119,18 @@ export async function ingestInboundMessage(input, context = {}) {
       await appendOfferRunEvent(existingRun.id, {
         event_type: 'email_deduplicated',
         level: 'info',
-        message: 'Duplicate inbound message ignored',
-        metadata: { idempotency_key: idempotencyKey, lead_fingerprint: leadFingerprint || null }
+        message: 'Duplicate inbound message ignored (exact idempotency match)',
+        metadata: { idempotency_key: idempotencyKey }
       }, paths);
     }
     return { duplicate: true, message: existingMessage, run: existingRun || null };
+  }
+
+  let possibleDuplicate = false;
+  if (!input.ignoreDedupe && leadFingerprint) {
+    if (inboundMessages.some(m => m.lead_fingerprint === leadFingerprint)) {
+      possibleDuplicate = true;
+    }
   }
 
   const now = new Date().toISOString();
@@ -144,18 +152,18 @@ export async function ingestInboundMessage(input, context = {}) {
   };
   await appendJsonl(inboundPath, message);
 
-  const run = await createOfferRun(message, paths);
+  const run = await createOfferRun(message, paths, { possibleDuplicate });
   await appendOfferRunEvent(run.id, {
     event_type: 'email_received',
     level: 'info',
-    message: 'Inbound email received',
-    metadata: { provider: message.provider, provider_message_id: message.provider_message_id, lead_fingerprint: message.lead_fingerprint }
+    message: 'Inbound email received' + (possibleDuplicate ? ' (possible duplicate)' : ''),
+    metadata: { provider: message.provider, provider_message_id: message.provider_message_id, lead_fingerprint: message.lead_fingerprint, possible_duplicate: possibleDuplicate }
   }, paths);
   return { duplicate: false, message, run };
 }
 
-export async function createOfferRun(inboundMessage, context = {}) {
-  if (usePostgresStorage()) return postgresStorage.createOfferRun(inboundMessage, context);
+export async function createOfferRun(inboundMessage, context = {}, options = {}) {
+  if (usePostgresStorage()) return postgresStorage.createOfferRun(inboundMessage, context, options);
   const paths = getStoragePaths(context);
   const now = new Date().toISOString();
   const run = {
@@ -175,6 +183,9 @@ export async function createOfferRun(inboundMessage, context = {}) {
     completed_at: null,
     summary: { editable_offer_version: 1 }
   };
+  if (options.possibleDuplicate) {
+    run.summary.possibleDuplicate = true;
+  }
   await appendJsonl(path.join(paths.baseDir, 'offer_runs.jsonl'), run);
   return run;
 }

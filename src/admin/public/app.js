@@ -46,6 +46,10 @@ const gmailConnectEl = document.querySelector('#gmail-connect');
 const outlookConnectEl = document.querySelector('#outlook-connect');
 const localLoginEl = document.querySelector('#local-login');
 const manualIngestButton = document.querySelector('#btn-manual-ingest');
+const manualIngestDialog = document.querySelector('#manual-ingest-dialog');
+const manualIngestSubmit = document.querySelector('#manual-ingest-submit');
+const manualIngestText = document.querySelector('#manual-ingest-text');
+const manualIngestIgnoreDedupe = document.querySelector('#manual-ingest-ignore-dedupe');
 const productGroupsEl = document.querySelector('#product-groups');
 const addProductGroupButton = document.querySelector('#add-product-group');
 const priceRulesEl = document.querySelector('#price-rules');
@@ -747,13 +751,30 @@ function preventDisabledLink(event) {
 }
 
 async function manualIngest() {
-  const rawText = window.prompt('Bitte den rohen Mail-Text oder die Anfrage hier hineinkopieren:');
-  if (!rawText || !rawText.trim()) return;
-  await request('/api/debug/manual-ingest', {
-    method: 'POST',
-    body: JSON.stringify({ rawText })
+  manualIngestText.value = '';
+  manualIngestIgnoreDedupe.checked = false;
+  manualIngestDialog.showModal();
+}
+
+if (manualIngestSubmit) {
+  manualIngestSubmit.addEventListener('click', async () => {
+    const rawText = manualIngestText.value.trim();
+    if (!rawText) return;
+    const ignoreDedupe = manualIngestIgnoreDedupe.checked;
+    
+    manualIngestSubmit.disabled = true;
+    manualIngestSubmit.textContent = 'Verarbeite...';
+    try {
+      await request('/api/debug/manual-ingest', {
+        method: 'POST',
+        body: JSON.stringify({ rawText, ignoreDedupe })
+      });
+      window.location.reload();
+    } finally {
+      manualIngestSubmit.disabled = false;
+      manualIngestSubmit.textContent = 'Neu verarbeiten';
+    }
   });
-  window.location.reload();
 }
 
 async function copyGmailQuery() {
@@ -789,6 +810,7 @@ async function refreshRuns() {
         <div class="offer-main" data-run-id="${escapeHtml(run.id)}" style="cursor:pointer;flex:1;">
           <strong>${escapeHtml(run.summary?.customerName || run.summary?.customerEmail || run.inbound_message_id || 'Run')}</strong>
           <small>${escapeHtml(run.error_message || run.summary?.topInventoryName || run.id)}</small>
+          ${run.summary?.possibleDuplicate ? '<span class="run-status warning" style="margin-top:4px;display:inline-block;">M&ouml;gliches Duplikat</span>' : ''}
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <span class="run-status ${escapeHtml(run.status)}">${escapeHtml(run.status)}</span>
@@ -821,6 +843,7 @@ function inboundStatusItemHtml(item) {
         <small>${escapeHtml([item.provider, item.from, formatDateTime(item.receivedAt)].filter(Boolean).join(' | '))}</small>
         <small>${escapeHtml(reason)}</small>
         ${eventTrail ? `<small>${escapeHtml(eventTrail)}</small>` : ''}
+        ${item.summary?.possibleDuplicate ? '<span class="run-status warning" style="margin-top:4px;display:inline-block;">M&ouml;gliches Duplikat</span>' : ''}
       </div>
       <span class="run-status ${escapeHtml(item.status)}">${escapeHtml(item.status)}</span>
     </button>

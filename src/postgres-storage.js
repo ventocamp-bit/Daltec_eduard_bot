@@ -246,26 +246,42 @@ export async function ingestInboundMessage(input, context = {}) {
 
   try {
     await client.query('BEGIN');
-    const existingResult = await client.query(
-      `SELECT * FROM inbound_messages
-       WHERE dealer_id = $1 AND (idempotency_key = $2 OR ($3 <> '' AND lead_fingerprint = $3))
-       LIMIT 1`,
-      [dealerId, idempotencyKey, leadFingerprint || '']
-    );
+    let existingResult;
+    if (!input.ignoreDedupe) {
+      existingResult = await client.query(
+        `SELECT * FROM inbound_messages
+         WHERE dealer_id = $1 AND idempotency_key = $2
+         LIMIT 1`,
+        [dealerId, idempotencyKey]
+      );
+    }
 
-    if (existingResult.rows[0]) {
+    if (existingResult && existingResult.rows[0]) {
       const existingMessage = normalizeInbound(existingResult.rows[0]);
       const existingRun = await findRunByInbound(client, dealerId, existingMessage.id);
       if (existingRun) {
         await insertOfferRunEvent(client, existingRun.id, {
           event_type: 'email_deduplicated',
           level: 'info',
-          message: 'Duplicate inbound message ignored',
-          metadata: { idempotency_key: idempotencyKey, lead_fingerprint: leadFingerprint || null }
+          message: 'Duplicate inbound message ignored (exact idempotency match)',
+          metadata: { idempotency_key: idempotencyKey }
         }, { tenantId: dealerId });
       }
       await client.query('COMMIT');
       return { duplicate: true, message: existingMessage, run: existingRun || null };
+    }
+
+    let possibleDuplicate = false;
+    if (!input.ignoreDedupe && leadFingerprint) {
+      const fingerprintResult = await client.query(
+        `SELECT id FROM inbound_messages
+         WHERE dealer_id = $1 AND lead_fingerprint = $2
+         LIMIT 1`,
+        [dealerId, leadFingerprint]
+      );
+      if (fingerprintResult.rows[0]) {
+        possibleDuplicate = true;
+      }
     }
 
     const now = new Date().toISOString();
@@ -308,12 +324,12 @@ export async function ingestInboundMessage(input, context = {}) {
       ]
     );
 
-    const run = await insertOfferRun(client, message, { tenantId: dealerId });
+    const run = await insertOfferRun(client, message, { tenantId: dealerId }, { possibleDuplicate });
     await insertOfferRunEvent(client, run.id, {
       event_type: 'email_received',
       level: 'info',
-      message: 'Inbound email received',
-      metadata: { provider: message.provider, provider_message_id: message.provider_message_id, lead_fingerprint: message.lead_fingerprint }
+      message: 'Inbound email received' + (possibleDuplicate ? ' (possible duplicate)' : ''),
+      metadata: { provider: message.provider, provider_message_id: message.provider_message_id, lead_fingerprint: message.lead_fingerprint, possible_duplicate: possibleDuplicate }
     }, { tenantId: dealerId });
     await client.query('COMMIT');
     return { duplicate: false, message, run };
@@ -476,7 +492,7 @@ export function isActiveRunStatus(status) {
   return ACTIVE_RUN_STATUSES.has(status);
 }
 
-async function insertOfferRun(client, inboundMessage, context = {}) {
+async function insertOfferRun(client, inboundMessage, context = {}, options = {}) {
   const dealerId = tenantIdFromContext(context);
   const now = new Date().toISOString();
   const run = {
@@ -496,6 +512,9 @@ async function insertOfferRun(client, inboundMessage, context = {}) {
     completed_at: null,
     summary: { editable_offer_version: 1 }
   };
+  if (options.possibleDuplicate) {
+    run.summary.possibleDuplicate = true;
+  }
   await client.query(
     `INSERT INTO offer_runs
      (id, dealer_id, inbound_message_id, customer_id, status, processing_version, inventory_snapshot_id, price_rule_id, error_code, error_message, retry_count, created_at, started_at, completed_at, summary)

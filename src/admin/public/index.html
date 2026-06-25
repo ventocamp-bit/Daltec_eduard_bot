@@ -287,6 +287,26 @@
         </section>
       </section>
     </main>
+    <dialog id="manual-ingest-dialog" class="manual-ingest-dialog">
+      <form method="dialog" class="panel-stack">
+        <div class="panel-head">
+          <strong>Rohmail einf&uuml;gen</strong>
+          <button value="cancel" type="button" class="secondary">Abbrechen</button>
+        </div>
+        <fieldset>
+          <label>Mail-Text oder Anfrage-Daten
+            <textarea id="manual-ingest-text" rows="10" placeholder="Kopiere die E-Mail hier hinein..."></textarea>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="manual-ingest-ignore-dedupe">
+            Duplikat-Pr&uuml;fung ignorieren
+          </label>
+        </fieldset>
+        <div class="button-row" style="margin-top: 16px;">
+          <button id="manual-ingest-submit" type="button" class="primary full-width">Neu verarbeiten</button>
+        </div>
+      </form>
+    </dialog>
     <script type="module" src="/app.js"></script>
   </body>
 </html>
