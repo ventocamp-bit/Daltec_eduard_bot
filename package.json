@@ -11,7 +11,6 @@
     "replay": "node src/replay.js",
     "export:gmail": "node src/export-mails.js",
     "export:proof-corpus": "node src/export-proof-corpus.js",
-    "migrate:postgres": "node src/migrate-jsonl-to-postgres.js",
     "backup:postgres": "node src/backup-postgres.js",
     "check:review-reminder": "node scripts/check-review-reminder.mjs",
     "analyze:proof": "node scripts/analyze-proof-runs.mjs",
