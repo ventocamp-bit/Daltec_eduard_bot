@@ -14,7 +14,10 @@ export async function createMailRuntime(config, context = {}, options = {}) {
       client: gmail,
       fetchUnreadMessages: googleAdapter.fetchUnreadMessages,
       markMessageRead: googleAdapter.markMessageRead,
-      sendHtmlMail: googleAdapter.sendHtmlMail,
+      sendHtmlMail: async (...args) => {
+        console.warn('MAIL SENDING DISABLED BY USER REQUEST. Would have sent via GMAIL:', args[1]?.subject);
+        return { id: 'disabled_by_user' };
+      },
       labelMessage: googleAdapter.labelMessage
     };
   }
@@ -26,7 +29,10 @@ export async function createMailRuntime(config, context = {}, options = {}) {
       client: await microsoftAdapter.createMicrosoftMailClient(config, context),
       fetchUnreadMessages: microsoftAdapter.fetchUnreadMessages,
       markMessageRead: microsoftAdapter.markMessageRead,
-      sendHtmlMail: microsoftAdapter.sendHtmlMail,
+      sendHtmlMail: async (...args) => {
+        console.warn('MAIL SENDING DISABLED BY USER REQUEST. Would have sent via OUTLOOK:', args[1]?.subject);
+        return { id: 'disabled_by_user' };
+      },
       labelMessage: async () => null
     };
   }
