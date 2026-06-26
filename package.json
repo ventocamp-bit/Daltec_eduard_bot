@@ -8,12 +8,8 @@
     "poll": "node src/index.js poll",
     "admin": "node src/admin/server.js",
     "dry-run": "node src/index.js dry-run",
-    "replay": "node src/replay.js",
-    "export:gmail": "node src/export-mails.js",
-    "export:proof-corpus": "node src/export-proof-corpus.js",
     "backup:postgres": "node src/backup-postgres.js",
     "check:review-reminder": "node scripts/check-review-reminder.mjs",
-    "analyze:proof": "node scripts/analyze-proof-runs.mjs",
     "test": "node --test"
   },
   "dependencies": {
