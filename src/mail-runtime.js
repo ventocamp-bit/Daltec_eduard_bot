@@ -5,6 +5,7 @@ export async function createMailRuntime(config, context = {}, options = {}) {
   const status = await getMailConnectionStatus(config, context);
   const allowLegacyGoogleToken = options.allowLegacyGoogleToken !== false;
   const hasLegacyGoogleToken = allowLegacyGoogleToken && await fileExists(config.google.oauthTokenPath);
+  const sendMode = process.env.MAIL_SEND_MODE || 'disabled';
 
   if (status.gmail.connected || hasLegacyGoogleToken) {
     const googleAdapter = await import('./adapters/google.js');
@@ -14,10 +15,9 @@ export async function createMailRuntime(config, context = {}, options = {}) {
       client: gmail,
       fetchUnreadMessages: googleAdapter.fetchUnreadMessages,
       markMessageRead: googleAdapter.markMessageRead,
-      sendHtmlMail: async (...args) => {
-        console.warn('MAIL SENDING DISABLED BY USER REQUEST. Would have sent via GMAIL:', args[1]?.subject);
-        return { id: 'disabled_by_user' };
-      },
+      sendHtmlMail: sendMode === 'enabled'
+        ? googleAdapter.sendHtmlMail
+        : disabledSender('gmail'),
       labelMessage: googleAdapter.labelMessage
     };
   }
@@ -29,13 +29,20 @@ export async function createMailRuntime(config, context = {}, options = {}) {
       client: await microsoftAdapter.createMicrosoftMailClient(config, context),
       fetchUnreadMessages: microsoftAdapter.fetchUnreadMessages,
       markMessageRead: microsoftAdapter.markMessageRead,
-      sendHtmlMail: async (...args) => {
-        console.warn('MAIL SENDING DISABLED BY USER REQUEST. Would have sent via OUTLOOK:', args[1]?.subject);
-        return { id: 'disabled_by_user' };
-      },
+      sendHtmlMail: sendMode === 'enabled'
+        ? microsoftAdapter.sendHtmlMail
+        : disabledSender('outlook'),
       labelMessage: async () => null
     };
   }
 
   throw new Error('Kein Mail-Zugang verbunden. In der Admin-Website Gmail oder Outlook verbinden.');
+}
+
+function disabledSender(provider) {
+  return async () => {
+    const error = new Error(`mail_send_disabled:${provider}`);
+    error.statusCode = 409;
+    throw error;
+  };
 }
