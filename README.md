@@ -1,78 +1,46 @@
 # Eduard Angebote
 
-Ein Werkzeug fuer eine Aufgabe: Eduard-Anfragen in pruefbare Angebotsentwuerfe verwandeln.
-
-## Produktversprechen
-
-1. Mail-Eingang lesen.
-2. Eduard-Anfrage erkennen.
-3. Kunde und Positionen extrahieren.
-4. Preis mit Haendlerregeln berechnen.
-5. Lager-CSV matchen.
-6. Entwurf intern zur Pruefung bereitstellen.
-7. Erst nach menschlicher Pruefung senden.
-
-Kein Auto-Send als Standard. Kein Demo-SaaS-Theater im Hauptflow.
-
-## Lokal starten
-
-```powershell
-npm install
-Copy-Item .env.example .env
-npm run admin
-```
-
-Admin:
+Ground Truth:
 
 ```text
-http://localhost:3030
+Eduard-Mail rein -> Parser -> Preislogik -> Lager-Match -> Haendler-Mail
 ```
 
-## Production
+## Kernflow
 
-Ein Production-Pfad:
+1. Ungelesene Eduard-Mail lesen.
+2. Kunde, Positionen, Preise und Artikelnummern extrahieren.
+3. Preise mit Haendlerregeln, MwSt. und Rundung berechnen.
+4. Lager-CSV matchen.
+5. HTML-Angebot an den Haendler senden.
+6. Run im Flight Recorder speichern.
+
+Keine UI als Produktkern. Keine zweite Angebotswahrheit.
+
+## Production
 
 ```bash
 cp .env.production.example .env.production
 docker compose -f docker-compose.app-only.yml up -d --build
 ```
 
-Reverse Proxy:
+## Mailversand
 
 ```text
-angebote.daltec.at -> http://127.0.0.1:3030
+MAIL_SEND_MODE=disabled
+MAIL_SEND_MODE=enabled
 ```
 
 ## Daten
 
-Die App nutzt eine CSV fuer Lager, Preise und Upsell.
-
 ```text
 data/lager.csv
-```
-
-Pflichtspalten stehen in:
-
-```text
 data/lager-preis-muster.csv
 ```
 
-## Mailversand
-
-Outbound-Mail ist standardmaessig deaktiviert:
-
-```text
-MAIL_SEND_MODE=disabled
-```
-
-Echter Versand wird erst aktiviert, wenn Setup, Testdaten und Owner-Review stabil sind:
-
-```text
-MAIL_SEND_MODE=enabled
-```
-
-## Tests
+## Lokal pruefen
 
 ```powershell
+npm install
 npm test
 ```
